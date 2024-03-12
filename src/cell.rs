@@ -68,17 +68,17 @@ impl Node {
         }
     }
 
-    pub fn get_quad(&self, x: u32, y: u32) -> Rc<RefCell<Node>> {
+    pub fn get_quad(&self, x: u32, y: u32) -> &Node {
         let result = match self {
             Node::MacroCell(mc) => match (x, y) {
-                (0, 0) => mc.ul.clone(),
-                (0, 1) => mc.ur.clone(),
-                (1, 0) => mc.ll.clone(),
-                (1, 1) => mc.lr.clone(),
-                _ => panic!("Unreachable"),
+                (0, 0) => &mc.ul.clone().as_ref().borrow(),
+                (0, 1) => &mc.ur.clone().as_ref().borrow(),
+                (1, 0) => &mc.ll.clone().as_ref().borrow(),
+                (1, 1) => &mc.lr.clone().as_ref().borrow(),
+                _ => panic!("&Unreachable"),
             },
-            Node::Empty(size) => Rc::new(RefCell::new(Node::Empty(*size - 1))),
-            Node::Leaf(_) => panic!("get_quad called on a leaf node"),
+            Node::Empty(size) => &Node::Empty(*size - 1),
+            Node::Leaf(_)=> panic!("get_quad called on a leaf node"),
         };
 
         result

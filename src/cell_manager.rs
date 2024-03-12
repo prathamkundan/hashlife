@@ -53,20 +53,20 @@ impl CellManager {
 
     fn combine_left_right(&self, l: &Node, r: &Node) -> Node {
         let combined = MacroCell::new(
-            l.get_quad(0, 1),
-            r.get_quad(0, 0),
-            l.get_quad(1, 1),
-            r.get_quad(1, 0),
+            Rc::new(RefCell::new(*l.get_quad(0, 1))),
+            Rc::new(RefCell::new(*r.get_quad(0, 0))),
+            Rc::new(RefCell::new(*l.get_quad(1, 1))),
+            Rc::new(RefCell::new(*r.get_quad(1, 0))),
         );
         Node::from(combined)
     }
 
     fn combine_top_bottom(&self, t: &Node, b: &Node) -> Node {
         let combined = MacroCell::new(
-            t.get_quad(1, 0),
-            t.get_quad(1, 1),
-            b.get_quad(0, 0),
-            b.get_quad(0, 1),
+            Rc::new(RefCell::new(*t.get_quad(1, 0))),
+            Rc::new(RefCell::new(*t.get_quad(1, 1))),
+            Rc::new(RefCell::new(*b.get_quad(0, 0))),
+            Rc::new(RefCell::new(*b.get_quad(0, 1))),
         );
         Node::from(combined)
     }
@@ -89,28 +89,28 @@ impl CellManager {
         lr: &Node,
     ) -> Node {
         let new_ul = MacroCell::new(
-            ul.get_quad(1, 1),
-            um.get_quad(1, 0),
-            ml.get_quad(0, 1),
-            mm.get_quad(0, 0),
+            Rc::new(RefCell::new(*ul.get_quad(1, 1))),
+            Rc::new(RefCell::new(*um.get_quad(1, 0))),
+            Rc::new(RefCell::new(*ml.get_quad(0, 1))),
+            Rc::new(RefCell::new(*mm.get_quad(0, 0))),
         );
         let new_ur = MacroCell::new(
-            um.get_quad(1, 1),
-            ur.get_quad(1, 0),
-            mm.get_quad(0, 1),
-            mr.get_quad(0, 0),
+            Rc::new(RefCell::new(*um.get_quad(1, 1))),
+            Rc::new(RefCell::new(*ur.get_quad(1, 0))),
+            Rc::new(RefCell::new(*mm.get_quad(0, 1))),
+            Rc::new(RefCell::new(*mr.get_quad(0, 0))),
         );
         let new_ll = MacroCell::new(
-            ml.get_quad(1, 1),
-            mm.get_quad(1, 0),
-            ll.get_quad(0, 1),
-            lm.get_quad(0, 0),
+            Rc::new(RefCell::new(*ml.get_quad(1, 1))),
+            Rc::new(RefCell::new(*mm.get_quad(1, 0))),
+            Rc::new(RefCell::new(*ll.get_quad(0, 1))),
+            Rc::new(RefCell::new(*lm.get_quad(0, 0))),
         );
         let new_lr = MacroCell::new(
-            mm.get_quad(1, 1),
-            mr.get_quad(1, 0),
-            lm.get_quad(0, 1),
-            lr.get_quad(0, 0),
+            Rc::new(RefCell::new(*mm.get_quad(1, 1))),
+            Rc::new(RefCell::new(*mr.get_quad(1, 0))),
+            Rc::new(RefCell::new(*lm.get_quad(0, 1))),
+            Rc::new(RefCell::new(*lr.get_quad(0, 0))),
         );
         let result = MacroCell::new(
             Rc::new(RefCell::new(Node::from(new_ul))),
@@ -129,32 +129,22 @@ impl CellManager {
         if node.get_size() == 2 {
             self.apply_rule(node)
         } else {
-            let um = self.combine_left_right(
-                &*node.get_quad(0, 0).as_ref().borrow(),
-                &*node.get_quad(0, 1).as_ref().borrow(),
-            );
-            let lm = self.combine_left_right(
-                &*node.get_quad(1, 0).as_ref().borrow(),
-                &*node.get_quad(1, 1).as_ref().borrow(),
-            );
-            let ml = self.combine_top_bottom(
-                &*node.get_quad(0, 0).as_ref().borrow(),
-                &*node.get_quad(1, 0).as_ref().borrow(),
-            );
-            let mr = self.combine_top_bottom(
-                &*node.get_quad(0, 1).as_ref().borrow(),
-                &*node.get_quad(1, 1).as_ref().borrow(),
-            );
+            let um = self.combine_left_right(&node.get_quad(0, 0), &node.get_quad(0, 1));
+            let lm = self.combine_left_right(&node.get_quad(1, 0), &node.get_quad(1, 1));
+            let ml = self.combine_top_bottom(&node.get_quad(0, 0), &node.get_quad(1, 0));
+            let mr = self.combine_top_bottom(&node.get_quad(0, 1), &node.get_quad(1, 1));
             let mm = self.combine_top_bottom(&lm, &um);
-            let ul_result = self.get_result(&*node.get_quad(0, 0).as_ref().borrow());
-            let ur_result = self.get_result(&*node.get_quad(0, 1).as_ref().borrow());
-            let ll_result = self.get_result(&*node.get_quad(1, 0).as_ref().borrow());
-            let lr_result = self.get_result(&*node.get_quad(1, 1).as_ref().borrow());
+
+            let ul_result = self.get_result(&node.get_quad(0, 0));
+            let ur_result = self.get_result(&node.get_quad(0, 1));
+            let ll_result = self.get_result(&node.get_quad(1, 0));
+            let lr_result = self.get_result(&node.get_quad(1, 1));
             let um_result = self.get_result(&um);
             let lm_result = self.get_result(&lm);
             let ml_result = self.get_result(&ml);
             let mr_result = self.get_result(&mr);
             let mm_result = self.get_result(&mm);
+
             let final_result = self.combine_results(
                 &ul_result, &um_result, &ur_result, &ml_result, &mm_result, &mr_result, &ll_result,
                 &lm_result, &lr_result,
@@ -163,7 +153,32 @@ impl CellManager {
         }
     }
 
-    fn _step(&self, node: &mut Rc<RefCell<Node>>) {}
+    fn join(&mut self, ul: Node, ur: Node, ll: Node, lr: Node) -> Node {
+        Node::from(MacroCell::new(
+            Rc::new(RefCell::new(ul)),
+            Rc::new(RefCell::new(ur)),
+            Rc::new(RefCell::new(ll)),
+            Rc::new(RefCell::new(lr)),
+        ))
+    }
+
+    fn _step(&mut self, node: &mut Rc<RefCell<Node>>) {
+        let result = self.get_result(&*node.borrow());
+
+        let mut ul = Node::new_empty(node.borrow().get_size() - 1);
+        *ul.get_quad(1, 1) = *result.get_quad(0, 0);
+
+        let mut ur = Node::new_empty(node.borrow().get_size() - 1);
+        *ur.get_quad(1, 0) = *result.get_quad(0, 1);
+
+        let mut ll = Node::new_empty(node.borrow().get_size() - 1);
+        *ll.get_quad(0, 1) = *result.get_quad(1, 0);
+
+        let mut lr = Node::new_empty(node.borrow().get_size() - 1);
+        *lr.get_quad(0, 0) = *result.get_quad(1, 1);
+
+        *node = Rc::new(RefCell::new(self.join(ul, ur, ll, lr)));
+    }
 
     fn step(&mut self) -> () {
         let mut parent = self.parent.to_owned();
@@ -226,7 +241,7 @@ impl CellManager {
     fn toggle(&mut self, x: u32, y: u32) -> () {
         self._toggle(&mut *self.parent.borrow_mut(), x, y);
         let mut result = self.parent.clone();
-        if let Node::Empty(size) = *self.parent.as_ref().borrow() {
+        if let Node::Empty(size) = *self.parent.borrow() {
             result = Rc::new(RefCell::new(Node::new_empty(size)));
         }
         self.parent = result;
@@ -244,26 +259,36 @@ mod test {
     fn test_toggle() {
         let mut cm = CellManager::setup(4);
         cm.toggle(0, 0);
-        assert_eq!(cm.parent.as_ref().borrow().state_at(0, 0), Leaf::Alive);
+        assert_eq!(cm.parent.borrow().state_at(0, 0), Leaf::Alive);
 
         cm.toggle(0, 0);
-        assert_eq!(cm.parent.as_ref().borrow().state_at(0, 0), Leaf::Dead);
+        assert_eq!(cm.parent.borrow().state_at(0, 0), Leaf::Dead);
 
         cm.toggle(5, 5);
-        assert_eq!(cm.parent.as_ref().borrow().state_at(5, 5), Leaf::Alive);
+        assert_eq!(cm.parent.borrow().state_at(5, 5), Leaf::Alive);
 
         cm.toggle(5, 5);
-        assert_eq!(cm.parent.as_ref().borrow().state_at(5, 5), Leaf::Dead);
+        assert_eq!(cm.parent.borrow().state_at(5, 5), Leaf::Dead);
 
         cm.toggle(5, 13);
-        assert_eq!(cm.parent.as_ref().borrow().state_at(5, 13), Leaf::Alive);
+        assert_eq!(cm.parent.borrow().state_at(5, 13), Leaf::Alive);
 
-        assert!(matches!(*cm.parent.as_ref().borrow(), Node::MacroCell(_)));
+        assert!(matches!(*cm.parent.borrow(), Node::MacroCell(_)));
 
         match &*cm.parent.borrow() {
             // The node should be empty...
-            Node::MacroCell(mc) => assert!(matches!(*mc.ul.as_ref().borrow(), Node::Empty(3))),
+            Node::MacroCell(mc) => assert!(matches!(*mc.ul.borrow(), Node::Empty(3))),
             _ => panic!("Macrocell not empty"),
         };
+    }
+
+    #[test]
+    fn test_step() {
+        let mut cm = CellManager::setup(3);
+        let points = [(6, 6), (7, 6), (7, 7), (6, 8)];
+        for (x, y) in points {
+            cm.toggle(x, y);
+        }
+        cm.step();
     }
 }
