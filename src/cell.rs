@@ -1,5 +1,5 @@
 use core::panic;
-use std::{cell::RefCell, rc::Rc};
+use std::{borrow::Borrow, cell::RefCell, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
@@ -38,10 +38,10 @@ impl Node {
         match self {
             Node::Leaf(leaf) => leaf == &Leaf::Dead,
             Node::MacroCell(mc) => {
-                mc.ul.borrow().is_dead()
-                    && mc.ur.borrow().is_dead()
-                    && mc.ll.borrow().is_dead()
-                    && mc.lr.borrow().is_dead()
+                mc.ul.as_ref().borrow().is_dead()
+                    && mc.ur.as_ref().borrow().is_dead()
+                    && mc.ll.as_ref().borrow().is_dead()
+                    && mc.lr.as_ref().borrow().is_dead()
             }
             Node::Empty(_) => true,
         }
@@ -56,10 +56,10 @@ impl Node {
                 let x = x / child_block_size;
                 let y = y / child_block_size;
                 match (x, y) {
-                    (0, 0) => mc.ul.borrow().state_at(rel_x, rel_y),
-                    (0, 1) => mc.ur.borrow().state_at(rel_x, rel_y),
-                    (1, 0) => mc.ll.borrow().state_at(rel_x, rel_y),
-                    (1, 1) => mc.lr.borrow().state_at(rel_x, rel_y),
+                    (0, 0) => mc.ul.as_ref().borrow().state_at(rel_x, rel_y),
+                    (0, 1) => mc.ur.as_ref().borrow().state_at(rel_x, rel_y),
+                    (1, 0) => mc.ll.as_ref().borrow().state_at(rel_x, rel_y),
+                    (1, 1) => mc.lr.as_ref().borrow().state_at(rel_x, rel_y),
                     _ => panic!("Unreachable"),
                 }
             }
@@ -91,7 +91,15 @@ impl Node {
 
 impl From<MacroCell> for Node {
     fn from(value: MacroCell) -> Self {
-        Node::MacroCell(value)
+        if value.ul.as_ref().borrow().is_dead()
+            && value.ur.as_ref().borrow().is_dead()
+            && value.ll.as_ref().borrow().is_dead()
+            && value.lr.as_ref().borrow().is_dead()
+        {
+            Node::Empty(value.size)
+        } else {
+            Node::MacroCell(value)
+        }
     }
 }
 
@@ -105,11 +113,16 @@ impl Leaf {
 }
 
 impl MacroCell {
-    pub fn new(ul: Rc<RefCell<Node>>, ur: Rc<RefCell<Node>>, ll: Rc<RefCell<Node>>, lr: Rc<RefCell<Node>>) -> MacroCell {
+    pub fn new(
+        ul: Rc<RefCell<Node>>,
+        ur: Rc<RefCell<Node>>,
+        ll: Rc<RefCell<Node>>,
+        lr: Rc<RefCell<Node>>,
+    ) -> MacroCell {
         assert!(
-            ul.borrow().get_size() == ur.borrow().get_size()
-                && ur.borrow().get_size() == ll.borrow().get_size()
-                && ll.borrow().get_size() == lr.borrow().get_size()
+            ul.as_ref().borrow().get_size() == ur.as_ref().borrow().get_size()
+                && ur.as_ref().borrow().get_size() == ll.as_ref().borrow().get_size()
+                && ll.as_ref().borrow().get_size() == lr.as_ref().borrow().get_size()
         );
 
         let size = ul.as_ref().borrow().get_size();

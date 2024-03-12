@@ -15,14 +15,13 @@ impl CellManager {
         }
     }
 
-    fn apply_rule(&self, node: &Rc<RefCell<Node>>) -> Rc<RefCell<Node>> {
+    fn apply_rule(&self, node: &Node) -> Node {
         // This is only supposed to be applied at the 4x4 level
-        let node = node.as_ref().borrow();
         assert!(node.get_size() == 2);
         let dx = [1, 0, -1, 0, 1, 1, -1, -1];
         let dy = [0, 1, 0, -1, 1, -1, -1, 1];
 
-        let result = Rc::new(RefCell::new(Node::new_empty(1)));
+        let mut result = Node::new_empty(1);
 
         for i in 1..=2 {
             for j in 1..=2 {
@@ -45,38 +44,122 @@ impl CellManager {
                 };
 
                 if new_state == Leaf::Alive {
-                    self._toggle(&mut *result.borrow_mut(), i - 1, j - 1);
+                    self._toggle(&mut result, i - 1, j - 1);
                 }
             }
         }
         result
     }
 
-    fn combine(&self, u: &Rc<RefCell<Node>>, v: &Rc<RefCell<Node>>) -> Rc<RefCell<Node>> {
-        let (u, v) = (u.as_ref().borrow(), v.as_ref().borrow());
-        Rc::new(RefCell::new(Node::new_empty(u.get_size())))
+    fn combine_left_right(&self, l: &Node, r: &Node) -> Node {
+        let combined = MacroCell::new(
+            l.get_quad(0, 1),
+            r.get_quad(0, 0),
+            l.get_quad(1, 1),
+            r.get_quad(1, 0),
+        );
+        Node::from(combined)
     }
 
-    fn combine_left_right(
-        &self,
-        u: &Rc<RefCell<Node>>,
-        v: &Rc<RefCell<Node>>,
-    ) -> Rc<RefCell<Node>> {
-        let (u, v) = (u.as_ref().borrow(), v.as_ref().borrow());
+    fn combine_top_bottom(&self, t: &Node, b: &Node) -> Node {
+        let combined = MacroCell::new(
+            t.get_quad(1, 0),
+            t.get_quad(1, 1),
+            b.get_quad(0, 0),
+            b.get_quad(0, 1),
+        );
+        Node::from(combined)
+    }
+
+    fn combine(&self, u: &Node, v: &Node) -> Node {
         let result = MacroCell::new_empty(u.get_size());
-        Rc::new(RefCell::new(Node::from(result)))
+        Node::from(result)
     }
 
-    fn get_result(&self, node: &Rc<RefCell<Node>>) -> Rc<RefCell<Node>> {
-        let node_ref = node.as_ref().borrow();
-        if let Node::Empty(size) = *node_ref {
-            return Rc::new(RefCell::new(Node::new_empty(size - 1)));
+    fn combine_results(
+        &self,
+        ul: &Node,
+        um: &Node,
+        ur: &Node,
+        ml: &Node,
+        mm: &Node,
+        mr: &Node,
+        ll: &Node,
+        lm: &Node,
+        lr: &Node,
+    ) -> Node {
+        let new_ul = MacroCell::new(
+            ul.get_quad(1, 1),
+            um.get_quad(1, 0),
+            ml.get_quad(0, 1),
+            mm.get_quad(0, 0),
+        );
+        let new_ur = MacroCell::new(
+            um.get_quad(1, 1),
+            ur.get_quad(1, 0),
+            mm.get_quad(0, 1),
+            mr.get_quad(0, 0),
+        );
+        let new_ll = MacroCell::new(
+            ml.get_quad(1, 1),
+            mm.get_quad(1, 0),
+            ll.get_quad(0, 1),
+            lm.get_quad(0, 0),
+        );
+        let new_lr = MacroCell::new(
+            mm.get_quad(1, 1),
+            mr.get_quad(1, 0),
+            lm.get_quad(0, 1),
+            lr.get_quad(0, 0),
+        );
+        let result = MacroCell::new(
+            Rc::new(RefCell::new(Node::from(new_ul))),
+            Rc::new(RefCell::new(Node::from(new_ur))),
+            Rc::new(RefCell::new(Node::from(new_ll))),
+            Rc::new(RefCell::new(Node::from(new_lr))),
+        );
+        Node::from(result)
+    }
+
+    fn get_result(&self, node: &Node) -> Node {
+        if let Node::Empty(size) = node {
+            return Node::new_empty(size - 1);
         }
 
-        if node_ref.get_size() == 2 {
+        if node.get_size() == 2 {
             self.apply_rule(node)
         } else {
-            self.get_result(&self.combine(node, node))
+            let um = self.combine_left_right(
+                &*node.get_quad(0, 0).as_ref().borrow(),
+                &*node.get_quad(0, 1).as_ref().borrow(),
+            );
+            let lm = self.combine_left_right(
+                &*node.get_quad(1, 0).as_ref().borrow(),
+                &*node.get_quad(1, 1).as_ref().borrow(),
+            );
+            let ml = self.combine_top_bottom(
+                &*node.get_quad(0, 0).as_ref().borrow(),
+                &*node.get_quad(1, 0).as_ref().borrow(),
+            );
+            let mr = self.combine_top_bottom(
+                &*node.get_quad(0, 1).as_ref().borrow(),
+                &*node.get_quad(1, 1).as_ref().borrow(),
+            );
+            let mm = self.combine_top_bottom(&lm, &um);
+            let ul_result = self.get_result(&*node.get_quad(0, 0).as_ref().borrow());
+            let ur_result = self.get_result(&*node.get_quad(0, 1).as_ref().borrow());
+            let ll_result = self.get_result(&*node.get_quad(1, 0).as_ref().borrow());
+            let lr_result = self.get_result(&*node.get_quad(1, 1).as_ref().borrow());
+            let um_result = self.get_result(&um);
+            let lm_result = self.get_result(&lm);
+            let ml_result = self.get_result(&ml);
+            let mr_result = self.get_result(&mr);
+            let mm_result = self.get_result(&mm);
+            let final_result = self.combine_results(
+                &ul_result, &um_result, &ur_result, &ml_result, &mm_result, &mr_result, &ll_result,
+                &lm_result, &lr_result,
+            );
+            final_result
         }
     }
 
@@ -171,6 +254,9 @@ mod test {
 
         cm.toggle(5, 5);
         assert_eq!(cm.parent.as_ref().borrow().state_at(5, 5), Leaf::Dead);
+
+        cm.toggle(5, 13);
+        assert_eq!(cm.parent.as_ref().borrow().state_at(5, 13), Leaf::Alive);
 
         assert!(matches!(*cm.parent.as_ref().borrow(), Node::MacroCell(_)));
 
