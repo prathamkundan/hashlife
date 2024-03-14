@@ -1,6 +1,6 @@
 mod cell;
 mod cell_manager;
-mod temp;
+mod node_factory;
 
 fn main() {
     println!("Hello, world!");

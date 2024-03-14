@@ -1,5 +1,5 @@
 use core::panic;
-use std::{borrow::Borrow, cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
@@ -16,10 +16,10 @@ pub enum Leaf {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MacroCell {
-    pub ul: Rc<RefCell<Node>>,
-    pub ur: Rc<RefCell<Node>>,
-    pub ll: Rc<RefCell<Node>>,
-    pub lr: Rc<RefCell<Node>>,
+    pub ul: Rc<Node>,
+    pub ur: Rc<Node>,
+    pub ll: Rc<Node>,
+    pub lr: Rc<Node>,
     pub size: u32,
     pub hash: String,
 }
@@ -38,10 +38,10 @@ impl Node {
         match self {
             Node::Leaf(leaf) => leaf == &Leaf::Dead,
             Node::MacroCell(mc) => {
-                mc.ul.as_ref().borrow().is_dead()
-                    && mc.ur.as_ref().borrow().is_dead()
-                    && mc.ll.as_ref().borrow().is_dead()
-                    && mc.lr.as_ref().borrow().is_dead()
+                mc.ul.is_dead()
+                    && mc.ur.as_ref().is_dead()
+                    && mc.ll.as_ref().is_dead()
+                    && mc.lr.as_ref().is_dead()
             }
             Node::Empty(_) => true,
         }
@@ -56,10 +56,10 @@ impl Node {
                 let x = x / child_block_size;
                 let y = y / child_block_size;
                 match (x, y) {
-                    (0, 0) => mc.ul.as_ref().borrow().state_at(rel_x, rel_y),
-                    (0, 1) => mc.ur.as_ref().borrow().state_at(rel_x, rel_y),
-                    (1, 0) => mc.ll.as_ref().borrow().state_at(rel_x, rel_y),
-                    (1, 1) => mc.lr.as_ref().borrow().state_at(rel_x, rel_y),
+                    (0, 0) => mc.ul.state_at(rel_x, rel_y),
+                    (0, 1) => mc.ur.state_at(rel_x, rel_y),
+                    (1, 0) => mc.ll.state_at(rel_x, rel_y),
+                    (1, 1) => mc.lr.state_at(rel_x, rel_y),
                     _ => panic!("Unreachable"),
                 }
             }
@@ -68,21 +68,22 @@ impl Node {
         }
     }
 
-    pub fn get_quad(&self, x: u32, y: u32) -> &Node {
+    pub fn get_quad(&self, x: u32, y: u32) -> Rc<Node> {
         let result = match self {
             Node::MacroCell(mc) => match (x, y) {
-                (0, 0) => &mc.ul.clone().as_ref().borrow(),
-                (0, 1) => &mc.ur.clone().as_ref().borrow(),
-                (1, 0) => &mc.ll.clone().as_ref().borrow(),
-                (1, 1) => &mc.lr.clone().as_ref().borrow(),
+                (0, 0) => mc.ul.clone(),
+                (0, 1) => mc.ur.clone(),
+                (1, 0) => mc.ll.clone(),
+                (1, 1) => mc.lr.clone(),
                 _ => panic!("&Unreachable"),
             },
-            Node::Empty(size) => &Node::Empty(*size - 1),
-            Node::Leaf(_)=> panic!("get_quad called on a leaf node"),
+            Node::Empty(size) => Rc::new(Node::Empty(*size - 1)),
+            Node::Leaf(_) => panic!("get_quad called on a leaf node"),
         };
 
         result
     }
+   
 
     pub fn new_empty(size: u32) -> Self {
         Node::from(MacroCell::new_empty(size))
@@ -91,11 +92,7 @@ impl Node {
 
 impl From<MacroCell> for Node {
     fn from(value: MacroCell) -> Self {
-        if value.ul.as_ref().borrow().is_dead()
-            && value.ur.as_ref().borrow().is_dead()
-            && value.ll.as_ref().borrow().is_dead()
-            && value.lr.as_ref().borrow().is_dead()
-        {
+        if value.ul.is_dead() && value.ur.is_dead() && value.ll.is_dead() && value.lr.is_dead() {
             Node::Empty(value.size)
         } else {
             Node::MacroCell(value)
@@ -113,24 +110,19 @@ impl Leaf {
 }
 
 impl MacroCell {
-    pub fn new(
-        ul: Rc<RefCell<Node>>,
-        ur: Rc<RefCell<Node>>,
-        ll: Rc<RefCell<Node>>,
-        lr: Rc<RefCell<Node>>,
-    ) -> MacroCell {
+    pub fn new(ul: Rc<Node>, ur: Rc<Node>, ll: Rc<Node>, lr: Rc<Node>) -> MacroCell {
         assert!(
-            ul.as_ref().borrow().get_size() == ur.as_ref().borrow().get_size()
-                && ur.as_ref().borrow().get_size() == ll.as_ref().borrow().get_size()
-                && ll.as_ref().borrow().get_size() == lr.as_ref().borrow().get_size()
+            ul.get_size() == ur.get_size()
+                && ur.get_size() == ll.get_size()
+                && ll.get_size() == lr.get_size()
         );
 
-        let size = ul.as_ref().borrow().get_size();
+        let size = ul.get_size();
         MacroCell {
-            ul: ul,
-            ur: ur,
-            ll: ll,
-            lr: lr,
+            ul,
+            ur,
+            ll,
+            lr,
             size: size + 1,
             // this will be a SHA256 / SHA128 hash of the above.
             hash: String::from(""),
@@ -140,18 +132,18 @@ impl MacroCell {
     pub fn new_empty(size: u32) -> MacroCell {
         if size == 1 {
             return MacroCell::new(
-                Rc::new(RefCell::new(Node::Leaf(Leaf::Dead))),
-                Rc::new(RefCell::new(Node::Leaf(Leaf::Dead))),
-                Rc::new(RefCell::new(Node::Leaf(Leaf::Dead))),
-                Rc::new(RefCell::new(Node::Leaf(Leaf::Dead))),
+                Rc::new(Node::Leaf(Leaf::Dead)),
+                Rc::new(Node::Leaf(Leaf::Dead)),
+                Rc::new(Node::Leaf(Leaf::Dead)),
+                Rc::new(Node::Leaf(Leaf::Dead)),
             );
         }
 
         MacroCell::new(
-            Rc::new(RefCell::new(Node::Empty(size - 1))),
-            Rc::new(RefCell::new(Node::Empty(size - 1))),
-            Rc::new(RefCell::new(Node::Empty(size - 1))),
-            Rc::new(RefCell::new(Node::Empty(size - 1))),
+            Rc::new(Node::Empty(size - 1)),
+            Rc::new(Node::Empty(size - 1)),
+            Rc::new(Node::Empty(size - 1)),
+            Rc::new(Node::Empty(size - 1)),
         )
     }
 }
