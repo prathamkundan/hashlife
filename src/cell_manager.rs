@@ -1,7 +1,7 @@
 use std::{iter::zip, rc::Rc};
 
 use crate::{
-    cell::{Leaf, MacroCell, Node},
+    cell::{Leaf, Node},
     node_factory::NodeFactory,
 };
 
@@ -55,23 +55,23 @@ impl CellManager {
     }
 
     fn combine_left_right(&mut self, l: &Node, r: &Node) -> Rc<Node> {
-        let combined = MacroCell::new(
+        let (ul, ur, ll, lr) = (
             self.nf.get_quad(l, 0, 1),
             self.nf.get_quad(r, 0, 0),
             self.nf.get_quad(l, 1, 1),
             self.nf.get_quad(r, 1, 0),
         );
-        Rc::new(Node::from(combined))
+        self.nf.node_from(ul, ur, ll, lr)
     }
 
     fn combine_top_bottom(&mut self, t: &Node, b: &Node) -> Rc<Node> {
-        let combined = MacroCell::new(
+        let (ul, ur, ll, lr) = (
             self.nf.get_quad(t, 1, 0),
             self.nf.get_quad(t, 1, 1),
             self.nf.get_quad(b, 0, 0),
             self.nf.get_quad(b, 0, 1),
         );
-        Rc::new(Node::from(combined))
+        self.nf.node_from(ul, ur, ll, lr)
     }
 
     fn combine_results(
@@ -86,37 +86,39 @@ impl CellManager {
         lm: Rc<Node>,
         lr: Rc<Node>,
     ) -> Rc<Node> {
-        let new_ul = MacroCell::new(
+        let (ul_ul, ul_ur, ul_ll, ul_lr) = (
             self.nf.get_quad(ul.as_ref(), 1, 1),
             self.nf.get_quad(um.as_ref(), 1, 0),
             self.nf.get_quad(ml.as_ref(), 0, 1),
             self.nf.get_quad(mm.as_ref(), 0, 0),
         );
-        let new_ur = MacroCell::new(
+        let new_ul = self.nf.node_from(ul_ul, ul_ur, ul_ll, ul_lr);
+
+        let (ur_ul, ur_ur, ur_ll, ur_lr) = (
             self.nf.get_quad(um.as_ref(), 1, 1),
             self.nf.get_quad(ur.as_ref(), 1, 0),
             self.nf.get_quad(mm.as_ref(), 0, 1),
             self.nf.get_quad(mr.as_ref(), 0, 0),
         );
-        let new_ll = MacroCell::new(
+        let new_ur = self.nf.node_from(ur_ul, ur_ur, ur_ll, ur_lr);
+
+        let (ll_ul, ll_ur, ll_ll, ll_lr) = (
             self.nf.get_quad(ml.as_ref(), 1, 1),
             self.nf.get_quad(mm.as_ref(), 1, 0),
             self.nf.get_quad(ll.as_ref(), 0, 1),
             self.nf.get_quad(lm.as_ref(), 0, 0),
         );
-        let new_lr = MacroCell::new(
+        let new_ll = self.nf.node_from(ll_ul, ll_ur, ll_ll, ll_lr);
+
+        let (lr_ul, lr_ur, lr_lr, ll_lr) = (
             self.nf.get_quad(mm.as_ref(), 1, 1),
             self.nf.get_quad(mr.as_ref(), 1, 0),
             self.nf.get_quad(lm.as_ref(), 0, 1),
             self.nf.get_quad(lr.as_ref(), 0, 0),
         );
-        let result = MacroCell::new(
-            Rc::new(Node::from(new_ul)),
-            Rc::new(Node::from(new_ur)),
-            Rc::new(Node::from(new_ll)),
-            Rc::new(Node::from(new_lr)),
-        );
-        Rc::new(Node::from(result))
+        let new_lr = self.nf.node_from(lr_ul, lr_ur, lr_lr, ll_lr);
+
+        self.nf.node_from(new_ul, new_ur, new_ll, new_lr)
     }
 
     fn get_result(&mut self, node: &Node) -> Rc<Node> {
