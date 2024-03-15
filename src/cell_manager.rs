@@ -1,21 +1,24 @@
-use std::{collections::HashMap, iter::zip, rc::Rc};
+use std::{iter::zip, rc::Rc};
 
-use crate::cell::{Leaf, MacroCell, Node};
+use crate::{
+    cell::{Leaf, MacroCell, Node},
+    node_factory::NodeFactory,
+};
 
 pub struct CellManager {
-    cache: HashMap<String, Rc<Node>>,
+    nf: NodeFactory,
     parent: Rc<Node>,
 }
 
 impl CellManager {
     fn setup(size: u32) -> CellManager {
         CellManager {
-            cache: HashMap::new(),
+            nf: NodeFactory::new(),
             parent: Rc::new(Node::new_empty(size)),
         }
     }
 
-    fn apply_rule(&self, node: &Node) -> Rc<Node> {
+    fn apply_rule(&mut self, node: &Node) -> Rc<Node> {
         // This is only supposed to be applied at the 4x4 level
         assert!(node.get_size() == 2);
         let dx = [1, 0, -1, 0, 1, 1, -1, -1];
@@ -51,28 +54,28 @@ impl CellManager {
         result
     }
 
-    fn combine_left_right(&self, l: &Node, r: &Node) -> Rc<Node> {
+    fn combine_left_right(&mut self, l: &Node, r: &Node) -> Rc<Node> {
         let combined = MacroCell::new(
-            l.get_quad(0, 1),
-            r.get_quad(0, 0),
-            l.get_quad(1, 1),
-            r.get_quad(1, 0),
+            self.nf.get_quad(l, 0, 1),
+            self.nf.get_quad(r, 0, 0),
+            self.nf.get_quad(l, 1, 1),
+            self.nf.get_quad(r, 1, 0),
         );
         Rc::new(Node::from(combined))
     }
 
-    fn combine_top_bottom(&self, t: &Node, b: &Node) -> Rc<Node> {
+    fn combine_top_bottom(&mut self, t: &Node, b: &Node) -> Rc<Node> {
         let combined = MacroCell::new(
-            t.get_quad(1, 0),
-            t.get_quad(1, 1),
-            b.get_quad(0, 0),
-            b.get_quad(0, 1),
+            self.nf.get_quad(t, 1, 0),
+            self.nf.get_quad(t, 1, 1),
+            self.nf.get_quad(b, 0, 0),
+            self.nf.get_quad(b, 0, 1),
         );
         Rc::new(Node::from(combined))
     }
 
     fn combine_results(
-        &self,
+        &mut self,
         ul: Rc<Node>,
         um: Rc<Node>,
         ur: Rc<Node>,
@@ -84,28 +87,28 @@ impl CellManager {
         lr: Rc<Node>,
     ) -> Rc<Node> {
         let new_ul = MacroCell::new(
-            ul.get_quad(1, 1),
-            um.get_quad(1, 0),
-            ml.get_quad(0, 1),
-            mm.get_quad(0, 0),
+            self.nf.get_quad(ul.as_ref(), 1, 1),
+            self.nf.get_quad(um.as_ref(), 1, 0),
+            self.nf.get_quad(ml.as_ref(), 0, 1),
+            self.nf.get_quad(mm.as_ref(), 0, 0),
         );
         let new_ur = MacroCell::new(
-            um.get_quad(1, 1),
-            ur.get_quad(1, 0),
-            mm.get_quad(0, 1),
-            mr.get_quad(0, 0),
+            self.nf.get_quad(um.as_ref(), 1, 1),
+            self.nf.get_quad(ur.as_ref(), 1, 0),
+            self.nf.get_quad(mm.as_ref(), 0, 1),
+            self.nf.get_quad(mr.as_ref(), 0, 0),
         );
         let new_ll = MacroCell::new(
-            ml.get_quad(1, 1),
-            mm.get_quad(1, 0),
-            ll.get_quad(0, 1),
-            lm.get_quad(0, 0),
+            self.nf.get_quad(ml.as_ref(), 1, 1),
+            self.nf.get_quad(mm.as_ref(), 1, 0),
+            self.nf.get_quad(ll.as_ref(), 0, 1),
+            self.nf.get_quad(lm.as_ref(), 0, 0),
         );
         let new_lr = MacroCell::new(
-            mm.get_quad(1, 1),
-            mr.get_quad(1, 0),
-            lm.get_quad(0, 1),
-            lr.get_quad(0, 0),
+            self.nf.get_quad(mm.as_ref(), 1, 1),
+            self.nf.get_quad(mr.as_ref(), 1, 0),
+            self.nf.get_quad(lm.as_ref(), 0, 1),
+            self.nf.get_quad(lr.as_ref(), 0, 0),
         );
         let result = MacroCell::new(
             Rc::new(Node::from(new_ul)),
@@ -116,24 +119,32 @@ impl CellManager {
         Rc::new(Node::from(result))
     }
 
-    fn get_result(&self, node: &Node) -> Rc<Node> {
+    fn get_result(&mut self, node: &Node) -> Rc<Node> {
         if let Node::Empty(size) = node {
-            return Rc::new(Node::new_empty(size - 1));
+            return self.nf.get_empty(size - 1);
+        }
+        if let Some(result) = self.nf.get_result(node) {
+            return result;
         }
 
         if node.get_size() == 2 {
             self.apply_rule(node)
         } else {
-            let um = self.combine_left_right(&node.get_quad(0, 0), &node.get_quad(0, 1));
-            let lm = self.combine_left_right(&node.get_quad(1, 0), &node.get_quad(1, 1));
-            let ml = self.combine_top_bottom(&node.get_quad(0, 0), &node.get_quad(1, 0));
-            let mr = self.combine_top_bottom(&node.get_quad(0, 1), &node.get_quad(1, 1));
+            let ul_quad = self.nf.get_quad(&node, 0, 0);
+            let ur_quad = self.nf.get_quad(&node, 0, 1);
+            let ll_quad = self.nf.get_quad(&node, 1, 0);
+            let lr_quad = self.nf.get_quad(&node, 1, 1);
+
+            let um = self.combine_left_right(ul_quad.as_ref(), ur_quad.as_ref());
+            let lm = self.combine_left_right(ll_quad.as_ref(), lr_quad.as_ref());
+            let ml = self.combine_top_bottom(ul_quad.as_ref(), ll_quad.as_ref());
+            let mr = self.combine_top_bottom(ur_quad.as_ref(), lr_quad.as_ref());
             let mm = self.combine_top_bottom(&um, &lm);
 
-            let ul_result = self.get_result(&node.get_quad(0, 0));
-            let ur_result = self.get_result(&node.get_quad(0, 1));
-            let ll_result = self.get_result(&node.get_quad(1, 0));
-            let lr_result = self.get_result(&node.get_quad(1, 1));
+            let ul_result = self.get_result(ul_quad.as_ref());
+            let ur_result = self.get_result(ur_quad.as_ref());
+            let ll_result = self.get_result(ll_quad.as_ref());
+            let lr_result = self.get_result(lr_quad.as_ref());
             let um_result = self.get_result(&um);
             let lm_result = self.get_result(&lm);
             let ml_result = self.get_result(&ml);
@@ -144,117 +155,130 @@ impl CellManager {
                 ul_result, um_result, ur_result, ml_result, mm_result, mr_result, ll_result,
                 lm_result, lr_result,
             );
+
+            self.nf.cache_result(node, final_result.clone());
             final_result
         }
     }
 
-    fn _step(&self, node: &Rc<Node>) -> Rc<Node> {
-        let result = Rc::new(self.get_result(node.as_ref()));
+    fn _step(&mut self, node: &Rc<Node>) -> Rc<Node> {
+        let result = self.get_result(node.as_ref());
 
-        let empty_cell = Rc::new(Node::new_empty(result.get_size() - 1));
+        let empty_cell = self.nf.get_empty(result.get_size() - 1);
 
-        let ul = Node::from(MacroCell::new(
+        let (ul_quad, ur_quad, ll_quad, lr_quad) = (
+            self.nf.get_quad(&result, 0, 0),
+            self.nf.get_quad(&result, 0, 1),
+            self.nf.get_quad(&result, 1, 0),
+            self.nf.get_quad(&result, 1, 1),
+        );
+        let ul = self.nf.node_from(
             empty_cell.clone(),
             empty_cell.clone(),
             empty_cell.clone(),
-            result.get_quad(0, 0),
-        ));
-        let ur = Node::from(MacroCell::new(
+            ul_quad,
+        );
+        let ur = self.nf.node_from(
             empty_cell.clone(),
             empty_cell.clone(),
-            result.get_quad(0, 1),
+            ur_quad,
             empty_cell.clone(),
-        ));
+        );
 
-        let ll = Node::from(MacroCell::new(
+        let ll = self.nf.node_from(
             empty_cell.clone(),
-            result.get_quad(1, 0),
-            empty_cell.clone(),
-            empty_cell.clone(),
-        ));
-        let lr = Node::from(MacroCell::new(
-            result.get_quad(1, 1),
+            ll_quad,
             empty_cell.clone(),
             empty_cell.clone(),
+        );
+        let lr = self.nf.node_from(
+            lr_quad,
             empty_cell.clone(),
-        ));
+            empty_cell.clone(),
+            empty_cell.clone(),
+        );
 
-        Rc::new(Node::from(MacroCell::new(
-            Rc::new(ul),
-            Rc::new(ur),
-            Rc::new(ll),
-            Rc::new(lr),
-        )))
+        self.nf.node_from(ul, ur, ll, lr)
     }
 
     fn step(&mut self) -> () {
-        let parent = self._step(&self.parent);
+        let parent = self._step(&self.parent.clone());
         self.parent = parent;
     }
 
-    fn _toggle(&self, curr: &Node, x: u32, y: u32) -> Rc<Node> {
+    fn _toggle(&mut self, curr: &Node, mut x: u32, mut y: u32) -> Rc<Node> {
         dbg!(curr.get_size());
         let curr_size = curr.get_size();
-        let mut curr = curr.to_owned();
+        let result;
 
         if curr_size >= 1 {
-            let nx = x % (1 << (curr_size - 1));
-            let ny = y % (1 << (curr_size - 1));
             let q_x = x / (1 << (curr_size - 1));
             let q_y = y / (1 << (curr_size - 1));
-            dbg!(nx, ny, x, y, q_x, q_y);
+            x = x % (1 << (curr_size - 1));
+            y = y % (1 << (curr_size - 1));
+            dbg!(x, y, q_x, q_y);
+
+            let (mut ul, mut ur, mut ll, mut lr) = (
+                self.nf.get_quad(curr, 0, 0),
+                self.nf.get_quad(curr, 0, 1),
+                self.nf.get_quad(curr, 1, 0),
+                self.nf.get_quad(curr, 1, 1),
+            );
+
             match curr {
-                Node::MacroCell(ref mut mc) => {
+                Node::MacroCell(ref mc) => {
                     match (q_x, q_y) {
-                        (0, 0) => mc.ul = self._toggle(mc.ul.as_ref(), nx, ny),
-                        (0, 1) => mc.ur = self._toggle(mc.ur.as_ref(), nx, ny),
-                        (1, 0) => mc.ll = self._toggle(mc.ll.as_ref(), nx, ny),
-                        (1, 1) => mc.lr = self._toggle(mc.lr.as_ref(), nx, ny),
+                        (0, 0) => ul = self._toggle(mc.ul.as_ref(), x, y),
+                        (0, 1) => ur = self._toggle(mc.ur.as_ref(), x, y),
+                        (1, 0) => ll = self._toggle(mc.ll.as_ref(), x, y),
+                        (1, 1) => lr = self._toggle(mc.lr.as_ref(), x, y),
                         _ => panic!("Unreachable"),
                     };
                 }
-                Node::Empty(size) => {
-                    let mut mc = MacroCell::new_empty(size);
+                Node::Empty(_) => {
                     match (q_x, q_y) {
-                        (0, 0) => mc.ul = self._toggle(mc.ul.as_ref(), nx, ny),
-                        (0, 1) => mc.ur = self._toggle(mc.ul.as_ref(), nx, ny),
-                        (1, 0) => mc.ll = self._toggle(mc.ul.as_ref(), nx, ny),
-                        (1, 1) => mc.lr = self._toggle(mc.ul.as_ref(), nx, ny),
+                        (0, 0) => ul = self._toggle(ul.as_ref(), x, y),
+                        (0, 1) => ur = self._toggle(ur.as_ref(), x, y),
+                        (1, 0) => ll = self._toggle(ll.as_ref(), x, y),
+                        (1, 1) => lr = self._toggle(lr.as_ref(), x, y),
                         _ => panic!("Unreachable"),
                     };
-                    curr = Node::from(mc);
                 }
                 _ => panic!("Unreachable"),
             }
+            result = self.nf.node_from(ul, ur, ll, lr)
         } else {
             match curr {
-                Node::Leaf(ref mut leaf) => {
-                    leaf.toggle();
-                    return Rc::new(curr);
+                Node::Leaf(ref leaf) => {
+                    result = self.nf.get_leaf(leaf.toggle());
                 }
                 _ => panic!("Unreachable"),
             }
         }
 
-        if curr.is_dead() {
-            Rc::new(Node::Empty(curr_size))
+        if result.is_dead() {
+            self.nf.get_empty(curr_size)
         } else {
-            Rc::new(curr)
+            result
         }
     }
 
     fn toggle(&mut self, x: u32, y: u32) -> () {
-        self.parent = self._toggle(self.parent.as_ref(), x, y);
+        let parent = self.parent.clone();
+        self.parent = self._toggle(parent.as_ref(), x, y);
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::env;
+
     use super::*;
     use crate::cell::*;
 
     #[test]
     fn test_toggle() {
+        env::set_var("RUST_BACKTRACE", "1");
         let mut cm = CellManager::setup(4);
         cm.toggle(0, 0);
         assert_eq!(cm.parent.state_at(0, 0), Leaf::Alive);
@@ -310,7 +334,7 @@ mod test {
         assert_eq!(cm.parent.state_at(3, 4), Leaf::Alive);
         assert_eq!(cm.parent.state_at(4, 4), Leaf::Alive);
         assert_eq!(cm.parent.state_at(4, 3), Leaf::Alive);
-        
+
         cm.step();
 
         assert_eq!(cm.parent.state_at(3, 3), Leaf::Alive);

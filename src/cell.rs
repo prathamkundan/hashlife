@@ -1,6 +1,8 @@
 use core::panic;
 use std::rc::Rc;
 
+use sha2::{Digest, Sha256};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
     MacroCell(MacroCell),
@@ -25,6 +27,31 @@ pub struct MacroCell {
 }
 
 impl Node {
+    pub fn calculate_hash(ul: &str, ur: &str, ll: &str, lr: &str) -> String {
+        let hash_buf = Sha256::digest(ul.to_owned() + &ur + &ll + &lr);
+        hex::encode(hash_buf)
+    }
+
+    pub fn get_hash(&self) -> String {
+        match self {
+            Node::MacroCell(mc) => mc.hash.clone(),
+            Node::Empty(size) => {
+                let mut result = Self::calculate_hash("0", "0", "0", "0");
+                for _ in 0..*size - 1 {
+                    result = Self::calculate_hash(&result, &result, &result, &result);
+                }
+                result
+            }
+            Node::Leaf(l) => {
+                if let Leaf::Alive = l {
+                    "1".to_owned()
+                } else {
+                    "0".to_owned()
+                }
+            }
+        }
+    }
+
     pub fn get_size(&self) -> u32 {
         match self {
             Node::MacroCell(ref mc) => mc.size,
@@ -33,7 +60,6 @@ impl Node {
         }
     }
 
-    // pub fn get_child(&self) -> Option
     pub fn is_dead(&self) -> bool {
         match self {
             Node::Leaf(leaf) => leaf == &Leaf::Dead,
@@ -68,22 +94,6 @@ impl Node {
         }
     }
 
-    pub fn get_quad(&self, x: u32, y: u32) -> Rc<Node> {
-        let result = match self {
-            Node::MacroCell(mc) => match (x, y) {
-                (0, 0) => mc.ul.clone(),
-                (0, 1) => mc.ur.clone(),
-                (1, 0) => mc.ll.clone(),
-                (1, 1) => mc.lr.clone(),
-                _ => panic!("&Unreachable"),
-            },
-            Node::Empty(size) => Rc::new(Node::Empty(*size - 1)),
-            Node::Leaf(_) => panic!("get_quad called on a leaf node"),
-        };
-
-        result
-    }
-   
 
     pub fn new_empty(size: u32) -> Self {
         Node::from(MacroCell::new_empty(size))
@@ -101,10 +111,10 @@ impl From<MacroCell> for Node {
 }
 
 impl Leaf {
-    pub fn toggle(&mut self) -> () {
+    pub fn toggle(&self) -> Self {
         match *self {
-            Leaf::Dead => *self = Leaf::Alive,
-            Leaf::Alive => *self = Leaf::Dead,
+            Leaf::Dead => Leaf::Alive,
+            Leaf::Alive => Leaf::Dead,
         }
     }
 }
@@ -119,31 +129,38 @@ impl MacroCell {
 
         let size = ul.get_size();
         MacroCell {
-            ul,
-            ur,
-            ll,
-            lr,
+            ul: ul.clone(),
+            ur: ur.clone(),
+            ll: ll.clone(),
+            lr: lr.clone(),
             size: size + 1,
             // this will be a SHA256 / SHA128 hash of the above.
-            hash: String::from(""),
+            hash: Node::calculate_hash(
+                &ul.get_hash(),
+                &ur.get_hash(),
+                &ll.get_hash(),
+                &lr.get_hash(),
+            ),
         }
     }
 
     pub fn new_empty(size: u32) -> MacroCell {
         if size == 1 {
+            let dead_ref = Rc::new(Node::Leaf(Leaf::Dead));
             return MacroCell::new(
-                Rc::new(Node::Leaf(Leaf::Dead)),
-                Rc::new(Node::Leaf(Leaf::Dead)),
-                Rc::new(Node::Leaf(Leaf::Dead)),
-                Rc::new(Node::Leaf(Leaf::Dead)),
+                dead_ref.clone(),
+                dead_ref.clone(),
+                dead_ref.clone(),
+                dead_ref.clone(),
             );
         }
 
+        let empty_ref = Rc::new(Node::Empty(size - 1));
         MacroCell::new(
-            Rc::new(Node::Empty(size - 1)),
-            Rc::new(Node::Empty(size - 1)),
-            Rc::new(Node::Empty(size - 1)),
-            Rc::new(Node::Empty(size - 1)),
+            empty_ref.clone(),
+            empty_ref.clone(),
+            empty_ref.clone(),
+            empty_ref.clone(),
         )
     }
 }
