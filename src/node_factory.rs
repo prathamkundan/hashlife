@@ -31,6 +31,9 @@ impl NodeFactory {
         if let Some(node) = self.node_cache.get(&node_hash) {
             node.clone()
         } else {
+            if ul.is_dead() && ur.is_dead() && ll.is_dead() && lr.is_dead() {
+                return self.get_empty(ul.get_size() + 1);
+            }
             let ans = Rc::new(Node::from(MacroCell::new(ul, ur, ll, lr)));
             self.node_cache.insert(node_hash, ans.clone());
             ans
