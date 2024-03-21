@@ -2,14 +2,14 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::cell::{Leaf, MacroCell, Node};
 
-pub struct NodeFactory {
+pub struct CellFactory {
     node_cache: HashMap<String, Rc<Node>>,
     result_cache: HashMap<String, Rc<Node>>,
 }
 
-impl NodeFactory {
+impl CellFactory {
     pub fn new() -> Self {
-        NodeFactory {
+        CellFactory {
             node_cache: HashMap::new(),
             result_cache: HashMap::new(),
         }

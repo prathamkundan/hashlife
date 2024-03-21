@@ -11,9 +11,10 @@ pub enum Node {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[repr(u8)]
 pub enum Leaf {
-    Dead,
-    Alive,
+    Dead = 0,
+    Alive = 1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

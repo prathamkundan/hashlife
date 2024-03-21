@@ -2,19 +2,19 @@ use std::{iter::zip, rc::Rc};
 
 use crate::{
     cell::{Leaf, Node},
-    node_factory::NodeFactory,
+    cell_factory::CellFactory,
 };
 
 pub struct CellManager {
-    nf: NodeFactory,
-    parent: Rc<Node>,
+    nf: CellFactory,
+    root: Rc<Node>,
 }
 
 impl CellManager {
-    fn setup(size: u32) -> CellManager {
+    pub fn setup(size: u32) -> CellManager {
         CellManager {
-            nf: NodeFactory::new(),
-            parent: Rc::new(Node::new_empty(size)),
+            nf: CellFactory::new(),
+            root: Rc::new(Node::new_empty(size)),
         }
     }
 
@@ -203,9 +203,9 @@ impl CellManager {
         self.nf.node_from(ul, ur, ll, lr)
     }
 
-    fn step(&mut self) -> () {
-        let parent = self._step(&self.parent.clone());
-        self.parent = parent;
+    pub fn step(&mut self) -> () {
+        let parent = self._step(&self.root.clone());
+        self.root = parent;
     }
 
     fn _toggle(&mut self, curr: &Node, mut x: u32, mut y: u32) -> Rc<Node> {
@@ -265,9 +265,13 @@ impl CellManager {
         }
     }
 
-    fn toggle(&mut self, x: u32, y: u32) -> () {
-        let parent = self.parent.clone();
-        self.parent = self._toggle(parent.as_ref(), x, y);
+    pub fn toggle(&mut self, x: u32, y: u32) -> () {
+        let parent = self.root.clone();
+        self.root = self._toggle(parent.as_ref(), x, y);
+    }
+
+    pub fn root_ref(&self) -> Rc<Node> {
+        self.root.clone()
     }
 }
 
@@ -283,23 +287,23 @@ mod test {
         env::set_var("RUST_BACKTRACE", "1");
         let mut cm = CellManager::setup(4);
         cm.toggle(0, 0);
-        assert_eq!(cm.parent.state_at(0, 0), Leaf::Alive);
+        assert_eq!(cm.root.state_at(0, 0), Leaf::Alive);
 
         cm.toggle(0, 0);
-        assert_eq!(cm.parent.state_at(0, 0), Leaf::Dead);
+        assert_eq!(cm.root.state_at(0, 0), Leaf::Dead);
 
         cm.toggle(5, 5);
-        assert_eq!(cm.parent.state_at(5, 5), Leaf::Alive);
+        assert_eq!(cm.root.state_at(5, 5), Leaf::Alive);
 
         cm.toggle(5, 5);
-        assert_eq!(cm.parent.state_at(5, 5), Leaf::Dead);
+        assert_eq!(cm.root.state_at(5, 5), Leaf::Dead);
 
         cm.toggle(5, 13);
-        assert_eq!(cm.parent.state_at(5, 13), Leaf::Alive);
+        assert_eq!(cm.root.state_at(5, 13), Leaf::Alive);
 
-        assert!(matches!(*cm.parent, Node::MacroCell(_)));
+        assert!(matches!(*cm.root, Node::MacroCell(_)));
 
-        match &*cm.parent {
+        match &*cm.root {
             // The node should be empty...
             Node::MacroCell(mc) => assert!(matches!(*mc.ul, Node::Empty(3))),
             _ => panic!("Macrocell not empty"),
@@ -314,35 +318,35 @@ mod test {
             cm.toggle(x, y);
         }
 
-        assert_eq!(cm.parent.state_at(3, 3), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(3, 5), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(3, 4), Leaf::Dead);
-        assert_eq!(cm.parent.state_at(4, 4), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(4, 3), Leaf::Alive);
+        assert_eq!(cm.root.state_at(3, 3), Leaf::Alive);
+        assert_eq!(cm.root.state_at(3, 5), Leaf::Alive);
+        assert_eq!(cm.root.state_at(3, 4), Leaf::Dead);
+        assert_eq!(cm.root.state_at(4, 4), Leaf::Alive);
+        assert_eq!(cm.root.state_at(4, 3), Leaf::Alive);
 
         cm.step();
 
-        println!("{}", cm.parent.is_dead());
-        assert_eq!(cm.parent.state_at(3, 3), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(3, 5), Leaf::Dead);
-        assert_eq!(cm.parent.state_at(3, 4), Leaf::Dead);
-        assert_eq!(cm.parent.state_at(4, 4), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(4, 3), Leaf::Alive);
+        println!("{}", cm.root.is_dead());
+        assert_eq!(cm.root.state_at(3, 3), Leaf::Alive);
+        assert_eq!(cm.root.state_at(3, 5), Leaf::Dead);
+        assert_eq!(cm.root.state_at(3, 4), Leaf::Dead);
+        assert_eq!(cm.root.state_at(4, 4), Leaf::Alive);
+        assert_eq!(cm.root.state_at(4, 3), Leaf::Alive);
 
         cm.step();
 
-        assert_eq!(cm.parent.state_at(3, 3), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(3, 5), Leaf::Dead);
-        assert_eq!(cm.parent.state_at(3, 4), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(4, 4), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(4, 3), Leaf::Alive);
+        assert_eq!(cm.root.state_at(3, 3), Leaf::Alive);
+        assert_eq!(cm.root.state_at(3, 5), Leaf::Dead);
+        assert_eq!(cm.root.state_at(3, 4), Leaf::Alive);
+        assert_eq!(cm.root.state_at(4, 4), Leaf::Alive);
+        assert_eq!(cm.root.state_at(4, 3), Leaf::Alive);
 
         cm.step();
 
-        assert_eq!(cm.parent.state_at(3, 3), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(3, 5), Leaf::Dead);
-        assert_eq!(cm.parent.state_at(3, 4), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(4, 4), Leaf::Alive);
-        assert_eq!(cm.parent.state_at(4, 3), Leaf::Alive);
+        assert_eq!(cm.root.state_at(3, 3), Leaf::Alive);
+        assert_eq!(cm.root.state_at(3, 5), Leaf::Dead);
+        assert_eq!(cm.root.state_at(3, 4), Leaf::Alive);
+        assert_eq!(cm.root.state_at(4, 4), Leaf::Alive);
+        assert_eq!(cm.root.state_at(4, 3), Leaf::Alive);
     }
 }
