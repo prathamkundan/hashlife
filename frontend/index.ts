@@ -1,21 +1,14 @@
 // Load the WebAssembly module
 import {memory} from 'wasm-crate/life_new_bg.wasm';
-import { Universe , greet} from 'wasm-crate/life_new';
+import { Universe } from 'wasm-crate/life_new';
 import './styles/styles.css';
 
-const numRows = 1024;
-const numCols = 1024;
+const levels = 10;
 
-const my_grid: number[][] = [];
-for (let i = 0; i < numRows; i++) {
-    my_grid[i] = [];
-    for (let j = 0; j < numCols; j++) {
-        my_grid[i][j] = 0;
-        if ((i * j) % 7 == 0) my_grid[i][j] = 1;
-    }
-}
+const numRows = 1<<levels;
+const numCols = 1<<levels;
 
-const universe = Universe.new(11);
+const universe = Universe.new(levels + 1);
 let grid: Uint8Array;
 
 function update_grid() {
@@ -29,7 +22,7 @@ function to_index(x: number, y: number) {
 
 
 const canvas: HTMLCanvasElement = document.getElementById('game-of-life-canvas')! as HTMLCanvasElement;
-const ctx: CanvasRenderingContext2D = canvas.getContext('2d')!;
+const ctx = canvas.getContext('2d')!;
 const container = document.getElementById('canvas-container')! as HTMLElement;
 
 const BLOCK_WIDTH = 10;
@@ -37,6 +30,8 @@ canvas.width = Math.round(container.clientWidth / 10) * BLOCK_WIDTH;
 canvas.height = Math.round(container.clientHeight / 10) * BLOCK_WIDTH;
 
 let mode = "EDIT"
+let animation_id:number | null = null;
+
 const UNIVERSE_WIDTH = BLOCK_WIDTH * numCols;
 const UNIVERSE_HEIGHT = BLOCK_WIDTH * numRows;
 const MAX_ZOOM_F = 10;
@@ -89,7 +84,7 @@ function drawCells() {
 
     for (let x = k * x_coord_start; x < vp_w * k; x += transformed_block_width) {
         for (let y = k * y_coord_start; y < vp_h * k; y += transformed_block_width) {
-            if (grid[to_index(x, y)] == 1) ctx.fillRect(x, y, k * BLOCK_WIDTH, k * BLOCK_WIDTH);
+            if (grid[to_index(x_ind, y_ind)] == 1) ctx.fillRect(x, y, k * BLOCK_WIDTH, k * BLOCK_WIDTH);
             y_ind++;
         }
         y_ind = y_ind_start;
@@ -124,6 +119,18 @@ function handleWheel(event: WheelEvent) {
     drawGrid();
 }
 
+function handleKeyDown(event: KeyboardEvent) {
+    if (event.code === "Space") {
+        if (animation_id === null) {
+            console.log("Play");
+            run();
+        } else {
+            console.log("Pause");
+            cancelAnimationFrame(animation_id)
+            animation_id = null;
+        }
+    }
+}
 
 function handleMouseDown(event: MouseEvent) {
     isDragging = true;
@@ -132,9 +139,7 @@ function handleMouseDown(event: MouseEvent) {
 
     if (mode == "EDIT") {
         let [x, y] = locToIndex(event.clientX, event.clientY);
-        console.log(x,y);
-        // universe.toggle(x, y);
-        my_grid[x][y] = 1 - my_grid[x][y];
+        universe.toggle(x, y);
         drawGrid();
     }
 }
@@ -160,19 +165,21 @@ function handleMouseMove(event: MouseEvent) {
     }
 }
 
-async function run() {
-
-    canvas.addEventListener('wheel', handleWheel);
-    canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('resize', () => {
-        canvas.width = Math.round(container.clientWidth / 10) * BLOCK_WIDTH;
-        canvas.height = Math.round(container.clientHeight / 10) * BLOCK_WIDTH;
-        drawGrid();
-    });
+canvas.addEventListener('wheel', handleWheel);
+canvas.addEventListener('mousedown', handleMouseDown);
+canvas.addEventListener('mousemove', handleMouseMove);
+canvas.addEventListener('mouseup', handleMouseUp);
+window.addEventListener('resize', () => {
+    canvas.width = Math.round(container.clientWidth / 10) * BLOCK_WIDTH;
+    canvas.height = Math.round(container.clientHeight / 10) * BLOCK_WIDTH;
     drawGrid();
+});
+window.addEventListener('keydown' , handleKeyDown);
+
+async function run() {
+    universe.tick();
+    drawGrid();
+    animation_id = requestAnimationFrame(run);
 }
 
-run();
-
+drawGrid();

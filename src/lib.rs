@@ -6,6 +6,13 @@ mod cell;
 mod cell_factory;
 mod cell_manager;
 use cell_manager::CellManager;
+mod utils;
+
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
 
 #[wasm_bindgen]
 extern "C" {
@@ -30,10 +37,10 @@ impl Universe {
     pub fn sync_to_buf(&mut self) {
         let region = self.cell_manager.root_ref();
         let offset = self.width >> 2;
-        let max_width = offset + self.visible_width;
-        for i in offset..max_width {
-            for j in 0..max_width {
-                self.cells[(self.width * i + j) as usize] = region.state_at(i, j) as u8;
+        for i in 0..self.visible_width {
+            for j in 0..self.visible_width {
+                self.cells[(self.visible_width * i + j) as usize] =
+                    region.state_at(offset + i, offset + j) as u8;
             }
         }
     }
@@ -42,6 +49,7 @@ impl Universe {
 #[wasm_bindgen]
 impl Universe {
     pub fn new(levels: u32) -> Self {
+        // utils::set_panic_hook();
         let width = 1 << levels;
         let visible_width = 1 << (levels - 1);
         let cells = (0..visible_width * visible_width).map(|_| 0).collect();
