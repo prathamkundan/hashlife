@@ -1,10 +1,21 @@
 extern crate wasm_bindgen;
 
-use cell_manager::CellManager;
 use wasm_bindgen::prelude::*;
+
 mod cell;
 mod cell_factory;
 mod cell_manager;
+use cell_manager::CellManager;
+
+#[wasm_bindgen]
+extern "C" {
+    fn alert(s: &str);
+}
+
+#[wasm_bindgen]
+pub fn greet() {
+    alert("Hello wasm")
+}
 
 #[wasm_bindgen]
 struct Universe {
@@ -52,5 +63,9 @@ impl Universe {
     pub fn tick(&mut self) {
         self.cell_manager.step();
         self.sync_to_buf();
+    }
+
+    pub fn get_cells(&self) -> *const u8 {
+        self.cells.as_ptr()
     }
 }

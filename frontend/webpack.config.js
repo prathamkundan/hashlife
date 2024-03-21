@@ -1,4 +1,4 @@
-const CopyPlugin = require("copy-webpack-plugin");
+const HTMLWebpackPlugin = require('html-webpack-plugin');
 const path = require("path");
 
 module.exports = {
@@ -14,19 +14,22 @@ module.exports = {
     module: {
         rules: [
             {
-                test: /.css$/,
-                use: ["style-loader", "css-loader"],
-            },
-            {
                 test: /\.ts$/,
                 use: "ts-loader",
                 include: [path.resolve(__dirname)]
+            },
+            {
+                test: /.css$/,
+                use: ["style-loader", "css-loader"],
             }
         ],
     },
+    resolve: {
+        extensions: [".ts", ".js"]
+    },
     plugins: [
-        new CopyPlugin({
-            patterns: [{ from: "index.html" }],
+        new HTMLWebpackPlugin({
+            template: path.resolve(__dirname, 'index.html'),
         }),
     ],
 };

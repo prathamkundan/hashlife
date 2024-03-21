@@ -286,20 +286,15 @@ mod test {
     fn test_toggle() {
         env::set_var("RUST_BACKTRACE", "1");
         let mut cm = CellManager::setup(4);
-        cm.toggle(0, 0);
-        assert_eq!(cm.root.state_at(0, 0), Leaf::Alive);
 
-        cm.toggle(0, 0);
-        assert_eq!(cm.root.state_at(0, 0), Leaf::Dead);
-
-        cm.toggle(5, 5);
-        assert_eq!(cm.root.state_at(5, 5), Leaf::Alive);
-
-        cm.toggle(5, 5);
-        assert_eq!(cm.root.state_at(5, 5), Leaf::Dead);
-
-        cm.toggle(5, 13);
-        assert_eq!(cm.root.state_at(5, 13), Leaf::Alive);
+        for i in 0..1<<4 {
+            for j in 0..1<<4 {
+                cm.toggle(i, j);
+                assert_eq!(cm.root.state_at(i, j), Leaf::Alive);
+                cm.toggle(i, j);
+                assert_eq!(cm.root.state_at(i, j), Leaf::Dead);
+            }
+        }
 
         assert!(matches!(*cm.root, Node::MacroCell(_)));
 
@@ -326,7 +321,6 @@ mod test {
 
         cm.step();
 
-        println!("{}", cm.root.is_dead());
         assert_eq!(cm.root.state_at(3, 3), Leaf::Alive);
         assert_eq!(cm.root.state_at(3, 5), Leaf::Dead);
         assert_eq!(cm.root.state_at(3, 4), Leaf::Dead);

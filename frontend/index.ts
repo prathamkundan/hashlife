@@ -1,5 +1,6 @@
 // Load the WebAssembly module
-// import init, { Universe, Cell } from './game_of_life.js';
+import {memory} from 'wasm-crate/life_new_bg.wasm';
+import { Universe , greet} from 'wasm-crate/life_new';
 import './styles/styles.css';
 
 const numRows = 1024;
@@ -13,6 +14,19 @@ for (let i = 0; i < numRows; i++) {
         if ((i * j) % 7 == 0) my_grid[i][j] = 1;
     }
 }
+
+const universe = Universe.new(11);
+let grid: Uint8Array;
+
+function update_grid() {
+    let cell_ptr = universe.get_cells();
+    grid = new Uint8Array(memory.buffer, cell_ptr, numRows * numRows);
+}
+
+function to_index(x: number, y: number) {
+    return x * numRows + y;
+}
+
 
 const canvas: HTMLCanvasElement = document.getElementById('game-of-life-canvas')! as HTMLCanvasElement;
 const ctx: CanvasRenderingContext2D = canvas.getContext('2d')!;
@@ -38,6 +52,7 @@ let dragStartX = 0;
 let dragStartY = 0;
 
 function drawGrid() {
+    update_grid()
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.beginPath();
 
@@ -74,7 +89,7 @@ function drawCells() {
 
     for (let x = k * x_coord_start; x < vp_w * k; x += transformed_block_width) {
         for (let y = k * y_coord_start; y < vp_h * k; y += transformed_block_width) {
-            if (my_grid[x_ind][y_ind] == 1) ctx.fillRect(x, y, k * BLOCK_WIDTH, k * BLOCK_WIDTH);
+            if (grid[to_index(x, y)] == 1) ctx.fillRect(x, y, k * BLOCK_WIDTH, k * BLOCK_WIDTH);
             y_ind++;
         }
         y_ind = y_ind_start;
@@ -91,7 +106,7 @@ function locToIndex(x: number, y: number) {
     let diff_x = x / transformed_block_width
     let diff_y = y / transformed_block_width
 
-    return [ Math.floor(base_x + diff_x), Math.floor(base_y + diff_y) ];
+    return [Math.floor(base_x + diff_x), Math.floor(base_y + diff_y)];
 }
 
 function handleWheel(event: WheelEvent) {
@@ -116,10 +131,16 @@ function handleMouseDown(event: MouseEvent) {
     dragStartY = event.clientY;
 
     if (mode == "EDIT") {
-        let [x,y] = locToIndex(event.clientX, event.clientY);
-        my_grid[x][y] = 1-my_grid[x][y];
+        let [x, y] = locToIndex(event.clientX, event.clientY);
+        console.log(x,y);
+        // universe.toggle(x, y);
+        my_grid[x][y] = 1 - my_grid[x][y];
         drawGrid();
     }
+}
+
+function handleMouseUp() {
+    isDragging = false;
 }
 
 function clamp(x: number, max: number, min: number) {
@@ -131,16 +152,12 @@ function handleMouseMove(event: MouseEvent) {
         const deltaX = event.clientX - dragStartX;
         const deltaY = event.clientY - dragStartY;
         let k = canvas.width / vp_w;
-        vp_ox = clamp(vp_ox - deltaX/k, UNIVERSE_WIDTH - vp_w, 0);
-        vp_oy = clamp(vp_oy - deltaY/k, UNIVERSE_HEIGHT - vp_h, 0);
+        vp_ox = clamp(vp_ox - deltaX / k, UNIVERSE_WIDTH - vp_w, 0);
+        vp_oy = clamp(vp_oy - deltaY / k, UNIVERSE_HEIGHT - vp_h, 0);
         dragStartX = event.clientX;
         dragStartY = event.clientY;
         drawGrid();
     }
-}
-
-function handleMouseUp() {
-    isDragging = false;
 }
 
 async function run() {
@@ -149,7 +166,7 @@ async function run() {
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('resize', () => { 
+    window.addEventListener('resize', () => {
         canvas.width = Math.round(container.clientWidth / 10) * BLOCK_WIDTH;
         canvas.height = Math.round(container.clientHeight / 10) * BLOCK_WIDTH;
         drawGrid();
