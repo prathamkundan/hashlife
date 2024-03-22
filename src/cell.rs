@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use sha2::{Digest, Sha256};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Node {
     MacroCell(MacroCell),
     Leaf(Leaf),
@@ -16,7 +16,7 @@ pub enum Leaf {
     Alive = 1,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct MacroCell {
     pub ul: Rc<Node>,
     pub ur: Rc<Node>,
