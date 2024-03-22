@@ -1,10 +1,9 @@
 use std::{iter::zip, rc::Rc};
 
-use web_sys::console::log_1;
 
 use crate::{
     cell::{Leaf, Node},
-    cell_factory::CellFactory, utils::Timer,
+    cell_factory::CellFactory,
 };
 
 pub struct CellManager {
@@ -123,17 +122,17 @@ impl CellManager {
         self.nf.node_from(new_ul, new_ur, new_ll, new_lr)
     }
 
-    fn get_result(&mut self, node: &Node) -> Rc<Node> {
-        if let Node::Empty(size) = node {
+    fn get_result(&mut self, node: Rc<Node>) -> Rc<Node> {
+        if let Node::Empty(size) = *node {
             return self.nf.get_empty(size - 1);
         }
-        if let Some(result) = self.nf.get_result(node) {
+        if let Some(result) = self.nf.get_result(node.clone()) {
             // log_1(&"Hit in result".into());
             return result;
         }
 
         if node.get_size() == 2 {
-            self.apply_rule(node)
+            self.apply_rule(&node)
         } else {
             let ul_quad = self.nf.get_quad(&node, 0, 0);
             let ur_quad = self.nf.get_quad(&node, 0, 1);
@@ -146,15 +145,15 @@ impl CellManager {
             let mr = self.combine_top_bottom(ur_quad.as_ref(), lr_quad.as_ref());
             let mm = self.combine_top_bottom(&um, &lm);
 
-            let ul_result = self.get_result(ul_quad.as_ref());
-            let ur_result = self.get_result(ur_quad.as_ref());
-            let ll_result = self.get_result(ll_quad.as_ref());
-            let lr_result = self.get_result(lr_quad.as_ref());
-            let um_result = self.get_result(&um);
-            let lm_result = self.get_result(&lm);
-            let ml_result = self.get_result(&ml);
-            let mr_result = self.get_result(&mr);
-            let mm_result = self.get_result(&mm);
+            let ul_result = self.get_result(ul_quad);
+            let ur_result = self.get_result(ur_quad);
+            let ll_result = self.get_result(ll_quad);
+            let lr_result = self.get_result(lr_quad);
+            let um_result = self.get_result(um);
+            let lm_result = self.get_result(lm);
+            let ml_result = self.get_result(ml);
+            let mr_result = self.get_result(mr);
+            let mm_result = self.get_result(mm);
 
             let final_result = self.combine_results(
                 ul_result, um_result, ur_result, ml_result, mm_result, mr_result, ll_result,
@@ -168,7 +167,7 @@ impl CellManager {
 
     fn _step(&mut self, node: &Rc<Node>) -> Rc<Node> {
         // let _timer = Timer::new("get_result");
-        let result = self.get_result(node.as_ref());
+        let result = self.get_result(node.clone());
 
         let empty_cell = self.nf.get_empty(result.get_size() - 1);
 
@@ -293,8 +292,8 @@ mod test {
         env::set_var("RUST_BACKTRACE", "1");
         let mut cm = CellManager::setup(4);
 
-        for i in 0..1<<4 {
-            for j in 0..1<<4 {
+        for i in 0..1 << 4 {
+            for j in 0..1 << 4 {
                 cm.toggle(i, j);
                 assert_eq!(cm.root.state_at(i, j), Leaf::Alive);
                 cm.toggle(i, j);
@@ -302,11 +301,10 @@ mod test {
             }
         }
 
-        assert!(matches!(*cm.root, Node::MacroCell(_)));
 
         match &*cm.root {
             // The node should be empty...
-            Node::MacroCell(mc) => assert!(matches!(*mc.ul, Node::Empty(3))),
+            Node::Empty(size) => assert_eq!(*size , 4),
             _ => panic!("Macrocell not empty"),
         };
     }

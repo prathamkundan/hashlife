@@ -1,7 +1,5 @@
 use core::panic;
-use std::rc::Rc;
-
-use sha2::{Digest, Sha256};
+use std::{hash::Hash, ptr, rc::Rc};
 
 #[derive(Debug)]
 pub enum Node {
@@ -23,35 +21,25 @@ pub struct MacroCell {
     pub ll: Rc<Node>,
     pub lr: Rc<Node>,
     pub size: u32,
-    pub hash: String,
 }
 
+impl Hash for Node {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        ptr::hash(&*self, state);
+    }
+
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        ptr::eq(&*self, &*other)
+    }
+
+}
+
+impl Eq for Node {}
+
 impl Node {
-    pub fn calculate_hash(ul: &str, ur: &str, ll: &str, lr: &str) -> String {
-        let hash_buf = Sha256::digest(ul.to_owned() + &ur + &ll + &lr);
-        hex::encode(hash_buf)
-    }
-
-    pub fn get_hash(&self) -> String {
-        match self {
-            Node::MacroCell(mc) => mc.hash.clone(),
-            Node::Empty(size) => {
-                let mut result = Self::calculate_hash("0", "0", "0", "0");
-                for _ in 0..*size - 1 {
-                    result = Self::calculate_hash(&result, &result, &result, &result);
-                }
-                result
-            }
-            Node::Leaf(l) => {
-                if let Leaf::Alive = l {
-                    "1".to_owned()
-                } else {
-                    "0".to_owned()
-                }
-            }
-        }
-    }
-
     pub fn get_size(&self) -> u32 {
         match self {
             Node::MacroCell(ref mc) => mc.size,
@@ -133,13 +121,6 @@ impl MacroCell {
             ll: ll.clone(),
             lr: lr.clone(),
             size: size + 1,
-            // this will be a SHA256 / SHA128 hash of the above.
-            hash: Node::calculate_hash(
-                &ul.get_hash(),
-                &ur.get_hash(),
-                &ll.get_hash(),
-                &lr.get_hash(),
-            ),
         }
     }
 

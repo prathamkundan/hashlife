@@ -1,12 +1,12 @@
 use std::{collections::HashMap, rc::Rc};
 
-use web_sys::console;
-
-use crate::{cell::{Leaf, MacroCell, Node}, utils::Timer};
+use crate::cell::{Leaf, MacroCell, Node};
 
 pub struct CellFactory {
-    node_cache: HashMap<String, Rc<Node>>,
-    result_cache: HashMap<String, Rc<Node>>,
+    node_cache: HashMap<[Rc<Node>; 4], Rc<Node>>,
+    result_cache: HashMap<Rc<Node>, Rc<Node>>,
+    empty_cache: Vec<Option<Rc<Node>>>,
+    leaf_cache: [Rc<Node>; 2],
 }
 
 impl CellFactory {
@@ -14,6 +14,11 @@ impl CellFactory {
         CellFactory {
             node_cache: HashMap::new(),
             result_cache: HashMap::new(),
+            empty_cache: (0..64).map(|_| None).collect(),
+            leaf_cache: [
+                Rc::new(Node::Leaf(Leaf::Dead)),
+                Rc::new(Node::Leaf(Leaf::Alive)),
+            ],
         }
     }
 
@@ -25,69 +30,53 @@ impl CellFactory {
         lr: Rc<Node>,
     ) -> Rc<Node> {
         // let timer = Timer::new("calculate_hash");
-        if ul.is_dead() && ur.is_dead() && ll.is_dead() && lr.is_dead() {
-            return self.get_empty(ul.get_size() + 1);
-        }
-        let ans = Rc::new(Node::from(MacroCell::new(ul, ur, ll, lr)));
-        // self.node_cache.insert(node_hash, ans.clone());
-        return ans;
-        let node_hash = Node::calculate_hash(
-            &ul.get_hash(),
-            &ur.get_hash(),
-            &ll.get_hash(),
-            &lr.get_hash(),
-        );
         // let timer = Timer::new("construct node");
-        if let Some(node) = self.node_cache.get(&node_hash) {
-            console::log_1(&"Hit".into());
+        if let Some(node) = self
+            .node_cache
+            .get(&[ul.clone(), ur.clone(), ll.clone(), lr.clone()])
+        {
+            // console::log_1(&"Hit".into());
             node.clone()
         } else {
             if ul.is_dead() && ur.is_dead() && ll.is_dead() && lr.is_dead() {
                 return self.get_empty(ul.get_size() + 1);
             }
-            let ans = Rc::new(Node::from(MacroCell::new(ul, ur, ll, lr)));
-            self.node_cache.insert(node_hash, ans.clone());
+            let ans = Rc::new(Node::from(MacroCell::new(
+                ul.clone(),
+                ur.clone(),
+                ll.clone(),
+                lr.clone(),
+            )));
+            self.node_cache.insert([ul, ur, ll, lr], ans.clone());
             ans
         }
     }
 
-    pub fn get_result(&self, node: &Node) -> Option<Rc<Node>> {
-        let node_hash = node.get_hash();
-        self.result_cache.get(&node_hash).cloned()
+    pub fn get_result(&self, node: Rc<Node>) -> Option<Rc<Node>> {
+        self.result_cache.get(&node).cloned()
     }
 
-    pub fn cache_result(&mut self, node: &Node, result: Rc<Node>) {
-        self.result_cache.insert(node.get_hash(), result);
+    pub fn cache_result(&mut self, node: Rc<Node>, result: Rc<Node>) {
+        self.result_cache.insert(node, result);
     }
 
     pub fn get_empty(&mut self, size: u32) -> Rc<Node> {
-        if size == 0 {
-            return self.get_leaf(Leaf::Dead);
-        }
-        let mut hash = Node::calculate_hash("0", "0", "0", "0");
-        for _ in 0..size - 1 {
-            hash = Node::calculate_hash(&hash, &hash, &hash, &hash)
-        }
-        if let Some(node) = self.node_cache.get(&hash) {
-            node.clone()
+        if let Some(node) = self.empty_cache[size as usize].clone() {
+            node
         } else {
+            if size == 0 {
+                return self.get_leaf(Leaf::Dead);
+            }
             let ans = Rc::new(Node::new_empty(size));
-            self.node_cache.insert(hash, ans.clone());
+            self.empty_cache[size as usize]= Some(ans.clone());
             ans
         }
     }
 
     pub fn get_leaf(&mut self, variant: Leaf) -> Rc<Node> {
-        let hash = match variant {
-            Leaf::Dead => "0".to_owned(),
-            Leaf::Alive => "1".to_owned(),
-        };
-        if let Some(node) = self.node_cache.get(&hash) {
-            node.clone()
-        } else {
-            let leaf = Rc::new(Node::Leaf(variant));
-            self.node_cache.insert(hash, leaf.clone());
-            leaf
+        match variant {
+            Leaf::Alive => self.leaf_cache[1].clone(),
+            Leaf::Dead => self.leaf_cache[0].clone(),
         }
     }
 

@@ -46,7 +46,7 @@ impl Universe {
 #[wasm_bindgen]
 impl Universe {
     pub fn new(levels: u32) -> Self {
-        // utils::set_panic_hook();
+        utils::set_panic_hook();
         let width = 1 << levels;
         let visible_width = 1 << (levels - 1);
         let cells = (0..visible_width * visible_width).map(|_| 0).collect();
