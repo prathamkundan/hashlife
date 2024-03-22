@@ -1,8 +1,10 @@
 use std::{iter::zip, rc::Rc};
 
+use web_sys::console::log_1;
+
 use crate::{
     cell::{Leaf, Node},
-    cell_factory::CellFactory,
+    cell_factory::CellFactory, utils::Timer,
 };
 
 pub struct CellManager {
@@ -126,6 +128,7 @@ impl CellManager {
             return self.nf.get_empty(size - 1);
         }
         if let Some(result) = self.nf.get_result(node) {
+            // log_1(&"Hit in result".into());
             return result;
         }
 
@@ -164,6 +167,7 @@ impl CellManager {
     }
 
     fn _step(&mut self, node: &Rc<Node>) -> Rc<Node> {
+        // let _timer = Timer::new("get_result");
         let result = self.get_result(node.as_ref());
 
         let empty_cell = self.nf.get_empty(result.get_size() - 1);
@@ -174,6 +178,8 @@ impl CellManager {
             self.nf.get_quad(&result, 1, 0),
             self.nf.get_quad(&result, 1, 1),
         );
+        // drop(_timer);
+        // let _timer = Timer::new("Combine Results");
         let ul = self.nf.node_from(
             empty_cell.clone(),
             empty_cell.clone(),

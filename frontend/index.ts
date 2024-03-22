@@ -1,12 +1,12 @@
 // Load the WebAssembly module
-import {memory} from 'wasm-crate/life_new_bg.wasm';
+import { memory } from 'wasm-crate/life_new_bg.wasm';
 import { Universe } from 'wasm-crate/life_new';
 import './styles/styles.css';
 
 const levels = 10;
 
-const numRows = 1<<levels;
-const numCols = 1<<levels;
+const numRows = 1 << levels;
+const numCols = 1 << levels;
 
 const universe = Universe.new(levels + 1);
 let grid: Uint8Array;
@@ -30,17 +30,19 @@ canvas.width = Math.round(container.clientWidth / 10) * BLOCK_WIDTH;
 canvas.height = Math.round(container.clientHeight / 10) * BLOCK_WIDTH;
 
 let mode = "EDIT"
-let animation_id:number | null = null;
+let animation_id: number | null = null;
 
 const UNIVERSE_WIDTH = BLOCK_WIDTH * numCols;
 const UNIVERSE_HEIGHT = BLOCK_WIDTH * numRows;
-const MAX_ZOOM_F = 10;
-const MIN_ZOOM_F = 4;
+const MAX_ZOOM_F = 5;
+const MIN_ZOOM_F = 1;
+
+let ratio = canvas.width / canvas.height;
 
 let vp_ox = 0;
 let vp_oy = 0;
 let vp_w = (128) * BLOCK_WIDTH;
-let vp_h = vp_w * canvas.height / canvas.width;
+let vp_h = vp_w / ratio;
 
 let isDragging = false;
 let dragStartX = 0;
@@ -105,16 +107,19 @@ function locToIndex(x: number, y: number) {
 }
 
 function handleWheel(event: WheelEvent) {
-    const wheelDelta = event.deltaY > 0 ? -0.1 : 0.1;
-    let deltaX = wheelDelta * vp_w;
-    let deltaY = wheelDelta * vp_h;
-    if (vp_w - deltaX > UNIVERSE_WIDTH / MIN_ZOOM_F || vp_w - deltaX < MAX_ZOOM_F * BLOCK_WIDTH
-        || vp_h - deltaY > UNIVERSE_HEIGHT / MIN_ZOOM_F || vp_h - deltaY < MAX_ZOOM_F * BLOCK_WIDTH) { }
+    const wheelDelta = event.deltaY > 0 ? 0.9 : 1.1;
+    const [x,y] = [ canvas.width - event.clientX, canvas.height - event.clientY ];
+    if (vp_w * wheelDelta > UNIVERSE_WIDTH / MIN_ZOOM_F || vp_w * wheelDelta < MAX_ZOOM_F * BLOCK_WIDTH
+        || vp_h * wheelDelta > UNIVERSE_HEIGHT / MIN_ZOOM_F || vp_h * wheelDelta < MAX_ZOOM_F * BLOCK_WIDTH) {
+    }
+
     else {
-        vp_w -= deltaX;
-        vp_h -= deltaY;
-        vp_ox = clamp(vp_ox + deltaX / 2, UNIVERSE_WIDTH - vp_w, 0);
-        vp_oy = clamp(vp_oy + deltaY / 2, UNIVERSE_HEIGHT - vp_h, 0);
+        let dx = ( wheelDelta -1 ) * x + (1-wheelDelta) * vp_w
+        let dy = ( wheelDelta -1 ) * y + (1-wheelDelta) * vp_h
+        vp_w *= wheelDelta;
+        vp_h *= wheelDelta;
+        vp_ox = clamp(vp_ox + dx, UNIVERSE_WIDTH - vp_w, 0);
+        vp_oy = clamp(vp_oy + dy, UNIVERSE_HEIGHT - vp_h, 0);
     }
     drawGrid();
 }
@@ -137,9 +142,10 @@ function handleMouseDown(event: MouseEvent) {
     dragStartX = event.clientX;
     dragStartY = event.clientY;
 
-    if (mode == "EDIT") {
+    if (mode == "EDIT" && animation_id === null) {
         let [x, y] = locToIndex(event.clientX, event.clientY);
         universe.toggle(x, y);
+        console.log(x, y)
         drawGrid();
     }
 }
@@ -172,12 +178,66 @@ canvas.addEventListener('mouseup', handleMouseUp);
 window.addEventListener('resize', () => {
     canvas.width = Math.round(container.clientWidth / 10) * BLOCK_WIDTH;
     canvas.height = Math.round(container.clientHeight / 10) * BLOCK_WIDTH;
+    ratio = canvas.width / canvas.height;
+    vp_w = (128) * BLOCK_WIDTH;
+    vp_h = vp_w * canvas.height / canvas.width;
     drawGrid();
 });
-window.addEventListener('keydown' , handleKeyDown);
+window.addEventListener('keydown', handleKeyDown);
 
-async function run() {
+
+class FPS {
+    fps: HTMLElement;
+    frames: number[];
+    lastFrameTimeStamp: number;
+
+    constructor() {
+        this.fps = document.getElementById("fps")!;
+        this.frames = [];
+        this.lastFrameTimeStamp = performance.now();
+    }
+
+    render() {
+        // Convert the delta time since the last frame render into a measure
+        // of frames per second.
+        const now = performance.now();
+        const delta = now - this.lastFrameTimeStamp;
+        this.lastFrameTimeStamp = now;
+        const fps = 1 / delta * 1000;
+
+        // Save only the latest 100 timings.
+        this.frames.push(fps);
+        if (this.frames.length > 100) {
+            this.frames.shift();
+        }
+
+        // Find the max, min, and mean of our 100 latest timings.
+        let min = Infinity;
+        let max = -Infinity;
+        let sum = 0;
+        for (let i = 0; i < this.frames.length; i++) {
+            sum += this.frames[i];
+            min = Math.min(this.frames[i], min);
+            max = Math.max(this.frames[i], max);
+        }
+        let mean = sum / this.frames.length;
+
+        // Render the statistics.
+        this.fps.textContent = `
+Frames per Second:
+         latest = ${Math.round(fps)}
+avg of last 100 = ${Math.round(mean)}
+min of last 100 = ${Math.round(min)}
+max of last 100 = ${Math.round(max)}
+`.trim();
+    }
+}
+
+
+const fps = new FPS();
+function run() {
     universe.tick();
+    fps.render();
     drawGrid();
     animation_id = requestAnimationFrame(run);
 }

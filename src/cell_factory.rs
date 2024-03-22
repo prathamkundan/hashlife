@@ -1,6 +1,8 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::cell::{Leaf, MacroCell, Node};
+use web_sys::console;
+
+use crate::{cell::{Leaf, MacroCell, Node}, utils::Timer};
 
 pub struct CellFactory {
     node_cache: HashMap<String, Rc<Node>>,
@@ -22,13 +24,22 @@ impl CellFactory {
         ll: Rc<Node>,
         lr: Rc<Node>,
     ) -> Rc<Node> {
+        // let timer = Timer::new("calculate_hash");
+        if ul.is_dead() && ur.is_dead() && ll.is_dead() && lr.is_dead() {
+            return self.get_empty(ul.get_size() + 1);
+        }
+        let ans = Rc::new(Node::from(MacroCell::new(ul, ur, ll, lr)));
+        // self.node_cache.insert(node_hash, ans.clone());
+        return ans;
         let node_hash = Node::calculate_hash(
             &ul.get_hash(),
             &ur.get_hash(),
             &ll.get_hash(),
             &lr.get_hash(),
         );
+        // let timer = Timer::new("construct node");
         if let Some(node) = self.node_cache.get(&node_hash) {
+            console::log_1(&"Hit".into());
             node.clone()
         } else {
             if ul.is_dead() && ur.is_dead() && ll.is_dead() && lr.is_dead() {

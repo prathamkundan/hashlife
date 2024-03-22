@@ -6,13 +6,10 @@ mod cell;
 mod cell_factory;
 mod cell_manager;
 use cell_manager::CellManager;
-mod utils;
 
-macro_rules! log {
-    ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into());
-    }
-}
+mod utils;
+use crate::utils::Timer;
+
 
 #[wasm_bindgen]
 extern "C" {
@@ -53,6 +50,7 @@ impl Universe {
         let width = 1 << levels;
         let visible_width = 1 << (levels - 1);
         let cells = (0..visible_width * visible_width).map(|_| 0).collect();
+
         Universe {
             levels,
             width,
@@ -69,6 +67,7 @@ impl Universe {
     }
 
     pub fn tick(&mut self) {
+        let _timer = Timer::new("Universe::tick");
         self.cell_manager.step();
         self.sync_to_buf();
     }

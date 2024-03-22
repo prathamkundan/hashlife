@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use sha2::{Digest, Sha256};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Node {
     MacroCell(MacroCell),
     Leaf(Leaf),
@@ -11,13 +11,12 @@ pub enum Node {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[repr(u8)]
 pub enum Leaf {
     Dead = 0,
     Alive = 1,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct MacroCell {
     pub ul: Rc<Node>,
     pub ur: Rc<Node>,
@@ -94,7 +93,6 @@ impl Node {
             Node::Empty(_) => Leaf::Dead,
         }
     }
-
 
     pub fn new_empty(size: u32) -> Self {
         Node::from(MacroCell::new_empty(size))

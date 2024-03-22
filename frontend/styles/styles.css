@@ -1,4 +1,5 @@
-body, html {
+body,
+html {
     margin: 0;
     padding: 0;
     height: 100%;
@@ -18,4 +19,16 @@ canvas {
     background-color: #FFFFFF;
 }
 
-
+.fps-stats {
+    white-space: pre;
+    font-family: monospace;
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 300px;
+    height: 100px;
+    margin-bottom: 10px;
+    margin-right: 10px;
+    background-color: #ddd;
+    text-align: center;
+}
