@@ -3,7 +3,7 @@ use std::{iter::zip, rc::Rc};
 
 use crate::{
     cell::{Leaf, Node},
-    cell_factory::CellFactory,
+    cell_factory::CellFactory, utils::Timer,
 };
 
 pub struct CellManager {
@@ -166,11 +166,9 @@ impl CellManager {
     }
 
     fn _step(&mut self, node: &Rc<Node>) -> Rc<Node> {
-        // let _timer = Timer::new("get_result");
         let result = self.get_result(node.clone());
 
         let empty_cell = self.nf.get_empty(result.get_size() - 1);
-
         let (ul_quad, ur_quad, ll_quad, lr_quad) = (
             self.nf.get_quad(&result, 0, 0),
             self.nf.get_quad(&result, 0, 1),
