@@ -1,6 +1,8 @@
 use std::{iter::zip, rc::Rc};
 
 
+use web_sys::console::log_1;
+
 use crate::{
     cell::{Leaf, Node},
     cell_factory::CellFactory, utils::Timer,
@@ -88,34 +90,34 @@ impl CellManager {
         lr: Rc<Node>,
     ) -> Rc<Node> {
         let (ul_ul, ul_ur, ul_ll, ul_lr) = (
-            self.nf.get_quad(ul.as_ref(), 1, 1),
-            self.nf.get_quad(um.as_ref(), 1, 0),
-            self.nf.get_quad(ml.as_ref(), 0, 1),
-            self.nf.get_quad(mm.as_ref(), 0, 0),
+            self.nf.get_quad(&ul, 1, 1),
+            self.nf.get_quad(&um, 1, 0),
+            self.nf.get_quad(&ml, 0, 1),
+            self.nf.get_quad(&mm, 0, 0),
         );
         let new_ul = self.nf.node_from(ul_ul, ul_ur, ul_ll, ul_lr);
 
         let (ur_ul, ur_ur, ur_ll, ur_lr) = (
-            self.nf.get_quad(um.as_ref(), 1, 1),
-            self.nf.get_quad(ur.as_ref(), 1, 0),
-            self.nf.get_quad(mm.as_ref(), 0, 1),
-            self.nf.get_quad(mr.as_ref(), 0, 0),
+            self.nf.get_quad(&um, 1, 1),
+            self.nf.get_quad(&ur, 1, 0),
+            self.nf.get_quad(&mm, 0, 1),
+            self.nf.get_quad(&mr, 0, 0),
         );
         let new_ur = self.nf.node_from(ur_ul, ur_ur, ur_ll, ur_lr);
 
         let (ll_ul, ll_ur, ll_ll, ll_lr) = (
-            self.nf.get_quad(ml.as_ref(), 1, 1),
-            self.nf.get_quad(mm.as_ref(), 1, 0),
-            self.nf.get_quad(ll.as_ref(), 0, 1),
-            self.nf.get_quad(lm.as_ref(), 0, 0),
+            self.nf.get_quad(&ml, 1, 1),
+            self.nf.get_quad(&mm, 1, 0),
+            self.nf.get_quad(&ll, 0, 1),
+            self.nf.get_quad(&lm, 0, 0),
         );
         let new_ll = self.nf.node_from(ll_ul, ll_ur, ll_ll, ll_lr);
 
         let (lr_ul, lr_ur, lr_lr, ll_lr) = (
-            self.nf.get_quad(mm.as_ref(), 1, 1),
-            self.nf.get_quad(mr.as_ref(), 1, 0),
-            self.nf.get_quad(lm.as_ref(), 0, 1),
-            self.nf.get_quad(lr.as_ref(), 0, 0),
+            self.nf.get_quad(&mm, 1, 1),
+            self.nf.get_quad(&mr, 1, 0),
+            self.nf.get_quad(&lm, 0, 1),
+            self.nf.get_quad(&lr, 0, 0),
         );
         let new_lr = self.nf.node_from(lr_ul, lr_ur, lr_lr, ll_lr);
 
@@ -127,7 +129,6 @@ impl CellManager {
             return self.nf.get_empty(size - 1);
         }
         if let Some(result) = self.nf.get_result(node.clone()) {
-            // log_1(&"Hit in result".into());
             return result;
         }
 
@@ -139,10 +140,10 @@ impl CellManager {
             let ll_quad = self.nf.get_quad(&node, 1, 0);
             let lr_quad = self.nf.get_quad(&node, 1, 1);
 
-            let um = self.combine_left_right(ul_quad.as_ref(), ur_quad.as_ref());
-            let lm = self.combine_left_right(ll_quad.as_ref(), lr_quad.as_ref());
-            let ml = self.combine_top_bottom(ul_quad.as_ref(), ll_quad.as_ref());
-            let mr = self.combine_top_bottom(ur_quad.as_ref(), lr_quad.as_ref());
+            let um = self.combine_left_right(&ul_quad, &ur_quad);
+            let lm = self.combine_left_right(&ll_quad, &lr_quad);
+            let ml = self.combine_top_bottom(&ul_quad, &ll_quad);
+            let mr = self.combine_top_bottom(&ur_quad, &lr_quad);
             let mm = self.combine_top_bottom(&um, &lm);
 
             let ul_result = self.get_result(ul_quad);
@@ -166,8 +167,9 @@ impl CellManager {
     }
 
     fn _step(&mut self, node: &Rc<Node>) -> Rc<Node> {
+        let _timer = Timer::new("get_result");
         let result = self.get_result(node.clone());
-
+        drop(_timer);
         let empty_cell = self.nf.get_empty(result.get_size() - 1);
         let (ul_quad, ur_quad, ll_quad, lr_quad) = (
             self.nf.get_quad(&result, 0, 0),
@@ -233,19 +235,19 @@ impl CellManager {
             match curr {
                 Node::MacroCell(ref mc) => {
                     match (q_x, q_y) {
-                        (0, 0) => ul = self._toggle(mc.ul.as_ref(), x, y),
-                        (0, 1) => ur = self._toggle(mc.ur.as_ref(), x, y),
-                        (1, 0) => ll = self._toggle(mc.ll.as_ref(), x, y),
-                        (1, 1) => lr = self._toggle(mc.lr.as_ref(), x, y),
+                        (0, 0) => ul = self._toggle(&mc.ul, x, y),
+                        (0, 1) => ur = self._toggle(&mc.ur, x, y),
+                        (1, 0) => ll = self._toggle(&mc.ll, x, y),
+                        (1, 1) => lr = self._toggle(&mc.lr, x, y),
                         _ => panic!("Unreachable"),
                     };
                 }
                 Node::Empty(_) => {
                     match (q_x, q_y) {
-                        (0, 0) => ul = self._toggle(ul.as_ref(), x, y),
-                        (0, 1) => ur = self._toggle(ur.as_ref(), x, y),
-                        (1, 0) => ll = self._toggle(ll.as_ref(), x, y),
-                        (1, 1) => lr = self._toggle(lr.as_ref(), x, y),
+                        (0, 0) => ul = self._toggle(&ul, x, y),
+                        (0, 1) => ur = self._toggle(&ur, x, y),
+                        (1, 0) => ll = self._toggle(&ll, x, y),
+                        (1, 1) => lr = self._toggle(&lr, x, y),
                         _ => panic!("Unreachable"),
                     };
                 }
@@ -270,7 +272,7 @@ impl CellManager {
 
     pub fn toggle(&mut self, x: u32, y: u32) -> () {
         let parent = self.root.clone();
-        self.root = self._toggle(parent.as_ref(), x, y);
+        self.root = self._toggle(&parent, x, y);
     }
 
     pub fn root_ref(&self) -> Rc<Node> {

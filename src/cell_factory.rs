@@ -29,8 +29,6 @@ impl CellFactory {
         ll: Rc<Node>,
         lr: Rc<Node>,
     ) -> Rc<Node> {
-        // let timer = Timer::new("calculate_hash");
-        // let timer = Timer::new("construct node");
         if let Some(node) = self
             .node_cache
             .get(&[ul.clone(), ur.clone(), ll.clone(), lr.clone()])

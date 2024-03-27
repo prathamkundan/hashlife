@@ -1,7 +1,7 @@
 // Load the WebAssembly module
 import { memory } from 'wasm-crate/life_new_bg.wasm';
 import { Universe } from 'wasm-crate/life_new';
-import './styles/styles.css';
+import '../styles/styles.css';
 
 const levels = 10;
 
@@ -19,7 +19,6 @@ function update_grid() {
 function to_index(x: number, y: number) {
     return x * numRows + y;
 }
-
 
 const canvas: HTMLCanvasElement = document.getElementById('game-of-life-canvas')! as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -41,7 +40,7 @@ let ratio = canvas.width / canvas.height;
 
 let vp_ox = 0;
 let vp_oy = 0;
-let vp_w = (128) * BLOCK_WIDTH;
+let vp_w = (100) *BLOCK_WIDTH;
 let vp_h = vp_w / ratio;
 
 let isDragging = false;
@@ -107,17 +106,19 @@ function locToIndex(x: number, y: number) {
 }
 
 function handleWheel(event: WheelEvent) {
-    const wheelDelta = event.deltaY > 0 ? 0.9 : 1.1;
-    const [x,y] = [ canvas.width - event.clientX, canvas.height - event.clientY ];
+    const wheelDelta = event.deltaY > 0 ? 1.1 : 0.9;
+    let x = (event.clientX / canvas.width) * vp_w;
+    let y = (event.clientY / canvas.height) * vp_h;
     if (vp_w * wheelDelta > UNIVERSE_WIDTH / MIN_ZOOM_F || vp_w * wheelDelta < MAX_ZOOM_F * BLOCK_WIDTH
         || vp_h * wheelDelta > UNIVERSE_HEIGHT / MIN_ZOOM_F || vp_h * wheelDelta < MAX_ZOOM_F * BLOCK_WIDTH) {
     }
-
     else {
-        let dx = ( wheelDelta -1 ) * x + (1-wheelDelta) * vp_w
-        let dy = ( wheelDelta -1 ) * y + (1-wheelDelta) * vp_h
         vp_w *= wheelDelta;
         vp_h *= wheelDelta;
+        let ny = (event.clientY / canvas.height) * vp_h;
+        let nx = (event.clientX / canvas.width) * vp_w;
+        let dx = x - nx;
+        let dy = y - ny;
         vp_ox = clamp(vp_ox + dx, UNIVERSE_WIDTH - vp_w, 0);
         vp_oy = clamp(vp_oy + dy, UNIVERSE_HEIGHT - vp_h, 0);
     }
@@ -141,6 +142,9 @@ function handleMouseDown(event: MouseEvent) {
     isDragging = true;
     dragStartX = event.clientX;
     dragStartY = event.clientY;
+    let x = (event.clientX / canvas.width) * vp_w;
+    let y = (event.clientY / canvas.height) * vp_h;
+    console.log("Click", x, y, x / y)
 
     if (mode == "EDIT" && animation_id === null) {
         let [x, y] = locToIndex(event.clientX, event.clientY);
