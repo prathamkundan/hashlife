@@ -43,7 +43,6 @@ impl CellFactory {
             .node_cache
             .get(&[ul.clone(), ur.clone(), ll.clone(), lr.clone()])
         {
-            // console::log_1(&"Hit".into());
             node.clone()
         } else {
             if ul.is_dead() && ur.is_dead() && ll.is_dead() && lr.is_dead() {

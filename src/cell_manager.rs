@@ -3,7 +3,6 @@ use std::{iter::zip, rc::Rc};
 use crate::{
     cell::{Leaf, Node},
     cell_factory::CellFactory,
-    utils::Timer,
 };
 
 /// CellManager, a class for managing the state of the cells.
@@ -18,9 +17,6 @@ pub struct CellManager {
 
 impl CellManager {
     /// Setup a new cell manager with a given size.
-    /// 
-    /// ### Arguments
-    /// * `size` - The log_2 of size of the root node.
     pub fn setup(size: u32) -> CellManager {
         CellManager {
             nf: CellFactory::new(),
@@ -197,9 +193,9 @@ impl CellManager {
 
     /// Advance the simulation by 1 step.
     fn _step(&mut self, node: &Rc<Node>) -> Rc<Node> {
-        let _timer = Timer::new("get_result");
+        // let _timer = Timer::new("get_result");
         let result = self.get_result(node.clone());
-        drop(_timer);
+        // drop(_timer);
 
         let empty_cell = self.nf.get_empty(result.get_size() - 1);
         let (ul_quad, ur_quad, ll_quad, lr_quad) = (
