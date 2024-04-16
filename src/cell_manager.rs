@@ -1,19 +1,26 @@
 use std::{iter::zip, rc::Rc};
 
-
-use web_sys::console::log_1;
-
 use crate::{
     cell::{Leaf, Node},
-    cell_factory::CellFactory, utils::Timer,
+    cell_factory::CellFactory,
+    utils::Timer,
 };
 
+/// CellManager, a class for managing the state of the cells.
+/// 
+/// Cell manager has a reference to the root node of the tree and a cell factory. It is responsible for
+/// toggling cells and stepping the simulation.
 pub struct CellManager {
+    /// Implementation of the cell factory that uses caching.
     nf: CellFactory,
     root: Rc<Node>,
 }
 
 impl CellManager {
+    /// Setup a new cell manager with a given size.
+    /// 
+    /// ### Arguments
+    /// * `size` - The log_2 of size of the root node.
     pub fn setup(size: u32) -> CellManager {
         CellManager {
             nf: CellFactory::new(),
@@ -21,10 +28,17 @@ impl CellManager {
         }
     }
 
+    /// Reset the cell manager with a new size.
+    /// 
+    /// ### Arguments
+    /// * `size` - The log_2 of size of the root node.
     pub fn reset(&mut self, size: u32) {
-        self.root =Rc::new(Node::new_empty(size)); 
+        self.root = Rc::new(Node::new_empty(size));
     }
 
+    /// Apply the rule to a 4x4 node.
+    /// 
+    /// Panics if the node is not 4x4 i.e. if node.get_size() != 2.
     fn apply_rule(&mut self, node: &Node) -> Rc<Node> {
         // This is only supposed to be applied at the 4x4 level
         assert!(node.get_size() == 2);
@@ -61,6 +75,7 @@ impl CellManager {
         result
     }
 
+    /// Combine the left and right nodes.
     fn combine_left_right(&mut self, l: &Node, r: &Node) -> Rc<Node> {
         let (ul, ur, ll, lr) = (
             self.nf.get_quad(l, 0, 1),
@@ -71,6 +86,7 @@ impl CellManager {
         self.nf.node_from(ul, ur, ll, lr)
     }
 
+    /// Combine the top and bottom nodes.
     fn combine_top_bottom(&mut self, t: &Node, b: &Node) -> Rc<Node> {
         let (ul, ur, ll, lr) = (
             self.nf.get_quad(t, 1, 0),
@@ -81,6 +97,7 @@ impl CellManager {
         self.nf.node_from(ul, ur, ll, lr)
     }
 
+    /// Combine the results from the 9 sub results
     fn combine_results(
         &mut self,
         ul: Rc<Node>,
@@ -128,7 +145,12 @@ impl CellManager {
         self.nf.node_from(new_ul, new_ur, new_ll, new_lr)
     }
 
+    /// Get the result of a node.
+    /// 
+    /// Uses the hashlife algorithm to get the result of a node. Advances time by 1.
+    /// returns a node with size = size - 1.
     fn get_result(&mut self, node: Rc<Node>) -> Rc<Node> {
+        // If the node is empty, return an empty node of size size - 1.
         if let Node::Empty(size) = *node {
             return self.nf.get_empty(size - 1);
         }
@@ -150,6 +172,7 @@ impl CellManager {
             let mr = self.combine_top_bottom(&ur_quad, &lr_quad);
             let mm = self.combine_top_bottom(&um, &lm);
 
+            // 9 holy recursions
             let ul_result = self.get_result(ul_quad);
             let ur_result = self.get_result(ur_quad);
             let ll_result = self.get_result(ll_quad);
@@ -160,20 +183,24 @@ impl CellManager {
             let mr_result = self.get_result(mr);
             let mm_result = self.get_result(mm);
 
+            // Combine the results of the 9 sub results
             let final_result = self.combine_results(
                 ul_result, um_result, ur_result, ml_result, mm_result, mr_result, ll_result,
                 lm_result, lr_result,
             );
 
+            // Cache the result for future use
             self.nf.cache_result(node, final_result.clone());
             final_result
         }
     }
 
+    /// Advance the simulation by 1 step.
     fn _step(&mut self, node: &Rc<Node>) -> Rc<Node> {
         let _timer = Timer::new("get_result");
         let result = self.get_result(node.clone());
         drop(_timer);
+
         let empty_cell = self.nf.get_empty(result.get_size() - 1);
         let (ul_quad, ur_quad, ll_quad, lr_quad) = (
             self.nf.get_quad(&result, 0, 0),
@@ -183,6 +210,8 @@ impl CellManager {
         );
         // drop(_timer);
         // let _timer = Timer::new("Combine Results");
+
+        // Constructing a bigger node from the 4 quadrants of the result of size - 1
         let ul = self.nf.node_from(
             empty_cell.clone(),
             empty_cell.clone(),
@@ -209,26 +238,34 @@ impl CellManager {
             empty_cell.clone(),
         );
 
+        // Creating a new node from the 4 result quadrants
         self.nf.node_from(ul, ur, ll, lr)
     }
 
+    /// Advance the simulation by 1 step and update the root node.
     pub fn step(&mut self) -> () {
         let parent = self._step(&self.root.clone());
         self.root = parent;
     }
 
+    /// Toggle a cell at a given position.
+    /// 
+    /// Does so recursively by toggling the cell at the given position and then updating the parent nodes.
     fn _toggle(&mut self, curr: &Node, mut x: u32, mut y: u32) -> Rc<Node> {
         dbg!(curr.get_size());
         let curr_size = curr.get_size();
         let result;
 
         if curr_size >= 1 {
+            // Find the quadrant where x and y lie
             let q_x = x / (1 << (curr_size - 1));
             let q_y = y / (1 << (curr_size - 1));
+            // Find the new x and y coordinates wrt to the containing quadrant
             x = x % (1 << (curr_size - 1));
             y = y % (1 << (curr_size - 1));
             dbg!(x, y, q_x, q_y);
 
+            // Get references to the 4 quadrants of the current node
             let (mut ul, mut ur, mut ll, mut lr) = (
                 self.nf.get_quad(curr, 0, 0),
                 self.nf.get_quad(curr, 0, 1),
@@ -238,6 +275,7 @@ impl CellManager {
 
             match curr {
                 Node::MacroCell(ref mc) => {
+                    // Update the quadrant where the cell lies
                     match (q_x, q_y) {
                         (0, 0) => ul = self._toggle(&mc.ul, x, y),
                         (0, 1) => ur = self._toggle(&mc.ur, x, y),
@@ -247,6 +285,7 @@ impl CellManager {
                     };
                 }
                 Node::Empty(_) => {
+                    // If the cell is empty, a new MacrocCell is created with the new cell toggled
                     match (q_x, q_y) {
                         (0, 0) => ul = self._toggle(&ul, x, y),
                         (0, 1) => ur = self._toggle(&ur, x, y),
@@ -257,6 +296,8 @@ impl CellManager {
                 }
                 _ => panic!("Unreachable"),
             }
+
+            // Create a new node from the 4 quadrants
             result = self.nf.node_from(ul, ur, ll, lr)
         } else {
             match curr {
@@ -267,6 +308,7 @@ impl CellManager {
             }
         }
 
+        /// probably not needed
         if result.is_dead() {
             self.nf.get_empty(curr_size)
         } else {
@@ -274,6 +316,7 @@ impl CellManager {
         }
     }
 
+    /// Toggle a cell at a given position and update the root node.
     pub fn toggle(&mut self, x: u32, y: u32) -> () {
         let parent = self.root.clone();
         self.root = self._toggle(&parent, x, y);
@@ -305,10 +348,9 @@ mod test {
             }
         }
 
-
         match &*cm.root {
             // The node should be empty...
-            Node::Empty(size) => assert_eq!(*size , 4),
+            Node::Empty(size) => assert_eq!(*size, 4),
             _ => panic!("Macrocell not empty"),
         };
     }

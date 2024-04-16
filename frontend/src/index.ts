@@ -1,5 +1,6 @@
 import '../styles/styles.css';
-import { MouseHandler, View } from './canvas';
+import { View } from './canvas';
+import { MouseHandler } from './handler';
 
 const container = document.getElementById('canvas-container')! as HTMLElement;
 const BLOCK_WIDTH = 10;
@@ -44,6 +45,12 @@ function handleKeyDown(event: KeyboardEvent) {
 
 window.addEventListener('keydown', handleKeyDown);
 
+window.addEventListener('resize', () => {
+    let width = Math.round(container.clientWidth / 10) * BLOCK_WIDTH;
+    let height = Math.round(container.clientHeight / 10) * BLOCK_WIDTH;
+    view.setCanvasDimensions(width, height);
+    view.drawGrid();
+});
 
 class FPS {
     fps: HTMLElement;
