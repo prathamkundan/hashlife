@@ -1,59 +1,115 @@
 body,
 html {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
 }
 
 #canvas-container {
-    display: block;
-    width: 100%;
-    height: 100%;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-    background-color: #FFFFFF;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
 }
 
 .fps-stats {
-    white-space: pre;
-    display: flex;
-    font-family: monospace;
-    color: #FFFFFF;
-    position: fixed;
-    bottom: 0;
-    right: 0;
-    width: 300px;
-    height: 100px;
-    margin-bottom: 10px;
-    margin-right: 10px;
-    /* background-color: #ddd; */
-    /* text-align: center; */
-    align-items: center;
-    justify-items: center;
+  white-space: pre;
+  display: flex;
+  font-family: monospace;
+  color: #ffffff;
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 300px;
+  height: 100px;
+  margin-bottom: 10px;
+  margin-right: 10px;
+  /* background-color: #ddd; */
+  /* text-align: center; */
+  align-items: center;
+  justify-items: center;
 }
 
 #mode-indicator {
-    position: fixed;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    bottom: 0;
-    left: 0;
-    width: 100px;
-    height: 30px;
-    margin-bottom: 10px;
-    margin-right: 10px;
-    /* background-color: #ddd; */
-    color: #FFFFFF;
-    font-size: 15px;
-    font-family: monospace;
-    font-weight: bold;
-    text-align: center;
-    padding-top: auto;
-    padding-bottom: auto;
+  position: fixed;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  bottom: 0;
+  left: 0;
+  width: 100px;
+  height: 30px;
+  margin-bottom: 10px;
+  margin-right: 10px;
+  color: #ffffff;
+  font-size: 15px;
+  font-family: monospace;
+  font-weight: bold;
+  text-align: center;
+  padding-top: auto;
+  padding-bottom: auto;
+}
+.tooltip {
+  position: fixed;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 20px;
+  margin-left: 20px;
+  top: 0;
+  left: 0;
+  display: inline-block;
+}
+
+.tooltip .tooltiptext {
+  visibility: hidden;
+  font-family: monospace;
+  width: 200px;
+  background-color: #ffffff;
+  color: #000;
+  text-align: center;
+  border-radius: 6px;
+  padding: 5px;
+  position: absolute;
+  z-index: 1;
+  left: 60%;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.tooltip .tooltiptext::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: 5px;
+  border-style: solid;
+}
+
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+
+.info-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: monospace;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  color: #000;
+  background-color: #ffffff;
+  border-radius: 50%;
 }

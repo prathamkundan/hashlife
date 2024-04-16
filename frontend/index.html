@@ -1,18 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Conway's Game of Life</title>
-</head>
+  </head>
 
-<body>
+  <body>
+    <div class="tooltip">
+      <div class="tooltiptext">
+      I - Enter Insert Mode <br>
+      Shift-R - Reset<br>
+      Esc - Enter Normal Mode<br>
+      Space - Play/Pause<br>
+      </div>
+      <div class="info-icon">i</div>
+    </div>
     <div id="canvas-container">
-        <canvas id="game-of-life-canvas"></canvas>
-        <div id="mode-indicator" class="mode-indicator">--NORMAL--</div>
+      <canvas id="game-of-life-canvas"></canvas>
+      <div id="mode-indicator" class="mode-indicator">--NORMAL--</div>
     </div>
     <div id="fps" class="fps-stats">Frames per Second</div>
-</body>
-
+  </body>
 </html>

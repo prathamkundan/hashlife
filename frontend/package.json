@@ -1,10 +1,13 @@
 {
+  "homepage": "https://prathamkundan.github.io/hashlife/",
   "name": "life-frontend",
   "version": "1.0.0",
   "description": "Frontend for the game of life made using WASM + Rust",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist",
     "start": "webpack-dev-server",
     "build": "webpack --config webpack.config.js"
   },
@@ -15,6 +18,7 @@
   },
   "devDependencies": {
     "css-loader": "^6.10.0",
+    "gh-pages": "^6.1.1",
     "html-webpack-plugin": "^5.6.0",
     "style-loader": "^3.3.4",
     "ts-loader": "^9.5.1",

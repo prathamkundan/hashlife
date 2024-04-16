@@ -45,7 +45,7 @@ export class MouseHandler {
         if (view.MODE == "INSERT") {
             let [x, y] = view.locToIndex(event.clientX, event.clientY);
             view.universe.toggle(x, y);
-            console.log(x, y)
+            // console.log(x, y)
             view.render();
         }
     }

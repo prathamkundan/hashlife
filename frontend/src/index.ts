@@ -14,10 +14,10 @@ function handleKeyDown(event: KeyboardEvent) {
         case "Space":
             view.setMode("NORMAL");
             if (animation_id === null) {
-                console.log("Play");
+                // console.log("Play");
                 run();
             } else {
-                console.log("Pause");
+                // console.log("Pause");
                 cancelAnimationFrame(animation_id)
                 animation_id = null;
             }
@@ -33,7 +33,7 @@ function handleKeyDown(event: KeyboardEvent) {
             view.setMode("NORMAL");
             break;
         case "KeyR":
-            console.log("R Pressed")
+            // console.log("R Pressed")
             if (view.MODE === "INSERT") view.clearUniverse();
             break;
         default:
