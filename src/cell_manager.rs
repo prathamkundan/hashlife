@@ -21,6 +21,10 @@ impl CellManager {
         }
     }
 
+    pub fn reset(&mut self, size: u32) {
+        self.root =Rc::new(Node::new_empty(size)); 
+    }
+
     fn apply_rule(&mut self, node: &Node) -> Rc<Node> {
         // This is only supposed to be applied at the 4x4 level
         assert!(node.get_size() == 2);

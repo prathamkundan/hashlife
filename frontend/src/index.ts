@@ -11,7 +11,7 @@ const eh = new MouseHandler(view)
 function handleKeyDown(event: KeyboardEvent) {
     switch (event.code) {
         case "Space":
-            view.MODE = "NORMAL";
+            view.setMode("NORMAL");
             if (animation_id === null) {
                 console.log("Play");
                 run();
@@ -23,13 +23,17 @@ function handleKeyDown(event: KeyboardEvent) {
             break;
         case "KeyI":
             if (view.MODE !== 'INSERT') {
-                view.MODE = "INSERT";
+                view.setMode("INSERT");
             } else {
-                view.MODE = "NORMAL";
+                view.setMode("NORMAL");
             }
             break;
         case "Escape":
-            view.MODE = "NORMAL";
+            view.setMode("NORMAL");
+            break;
+        case "KeyR":
+            console.log("R Pressed")
+            if (view.MODE === "INSERT") view.clearUniverse();
             break;
         default:
             // Handle other keys if needed

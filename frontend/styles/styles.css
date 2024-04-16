@@ -21,7 +21,9 @@ canvas {
 
 .fps-stats {
     white-space: pre;
+    display: flex;
     font-family: monospace;
+    color: #FFFFFF;
     position: fixed;
     bottom: 0;
     right: 0;
@@ -29,6 +31,29 @@ canvas {
     height: 100px;
     margin-bottom: 10px;
     margin-right: 10px;
-    background-color: #ddd;
+    /* background-color: #ddd; */
+    /* text-align: center; */
+    align-items: center;
+    justify-items: center;
+}
+
+#mode-indicator {
+    position: fixed;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    bottom: 0;
+    left: 0;
+    width: 100px;
+    height: 30px;
+    margin-bottom: 10px;
+    margin-right: 10px;
+    /* background-color: #ddd; */
+    color: #FFFFFF;
+    font-size: 15px;
+    font-family: monospace;
+    font-weight: bold;
     text-align: center;
+    padding-top: auto;
+    padding-bottom: auto;
 }

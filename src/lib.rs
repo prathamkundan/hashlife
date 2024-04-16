@@ -3,7 +3,6 @@ use wasm_bindgen::prelude::*;
 
 use std::{collections::BTreeSet, iter::zip};
 
-
 mod cell;
 mod cell_factory;
 mod cell_manager;
@@ -109,21 +108,21 @@ impl Universe {
         self.cell_manager.toggle(nx, ny);
 
         let linear_index = self.to_linear_universe(nx, ny);
-        let index = self.to_linear_viewport(x, y);
-        if self.cells[index as usize] == 1 {
-            self.iter_neighbors(nx, ny).for_each(|(_nx, _ny)| {
-                self.update_indices
-                    .remove(&self.to_linear_universe(_nx, _ny));
-            });
+        let index = self.to_linear_viewport(x, y) as usize;
+        if self.cells[index] == 1 {
+            // self.iter_neighbors(nx, ny).for_each(|(_nx, _ny)| {
+            //     self.update_indices
+            //         .remove(&self.to_linear_universe(_nx, _ny));
+            // });
             self.update_indices.remove(&linear_index);
 
-            self.cells[index as usize] = 0 as u8;
+            self.cells[index] = 0 as u8;
         } else {
             self.iter_neighbors(nx, ny).for_each(|(_nx, _ny)| {
                 self.update_indices
                     .insert(self.to_linear_universe(_nx, _ny));
             });
-            self.cells[index as usize] = 1 as u8;
+            self.cells[index] = 1 as u8;
         }
     }
 
@@ -136,5 +135,13 @@ impl Universe {
 
     pub fn get_cells(&self) -> *const u8 {
         self.cells.as_ptr()
+    }
+
+    pub fn reset(&mut self) {
+        self.cells = (0..self.visible_width * self.visible_width)
+            .map(|_| 0)
+            .collect();
+        self.cell_manager.reset(self.levels);
+        self.sync_to_buf();
     }
 }

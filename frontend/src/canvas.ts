@@ -9,6 +9,7 @@ export class MouseHandler {
     private isDragging: Boolean = false;
     private dragStartX: number = 0;
     private dragStartY: number = 0;
+    private lastToggled: number[] = [-1, -1];
     private view: View;
 
     constructor(view: View) {
@@ -17,7 +18,7 @@ export class MouseHandler {
 
     handleMouseMove = (event: MouseEvent) => {
         const view = this.view;
-        console.log(this.isDragging, view.MODE);
+
         if (view.MODE == "NORMAL" && this.isDragging) {
             const deltaX = event.clientX - this.dragStartX;
             const deltaY = event.clientY - this.dragStartY;
@@ -29,7 +30,9 @@ export class MouseHandler {
             view.render();
         } else if (view.MODE == "INSERT" && this.isDragging) {
             let [x, y] = view.locToIndex(event.clientX, event.clientY);
+            if ([x, y].toString() === this.lastToggled.toString()) return;
             view.universe.toggle(x, y);
+            this.lastToggled = [x, y]
             view.render();
         }
     }
@@ -48,11 +51,34 @@ export class MouseHandler {
         }
     }
 
+    handleWheel = (event: WheelEvent) => {
+        const canvas = this.view.canvas;
+        const view = this.view;
+        const wheelDelta = event.deltaY > 0 ? 1.1 : 0.9;
+        let x = (event.clientX / canvas.width) * view.vp_w;
+        let y = (event.clientY / canvas.height) * view.vp_h;
+        if (view.vp_w * wheelDelta > this.view.UNIVERSE_WIDTH || view.vp_w * wheelDelta < 10 * this.view.BLOCK_WIDTH
+            || view.vp_h * wheelDelta > view.UNIVERSE_WIDTH || view.vp_h * wheelDelta < 10 * view.BLOCK_WIDTH) {
+        }
+        else {
+            view.vp_w *= wheelDelta;
+            view.vp_h *= wheelDelta;
+            let ny = (event.clientY / canvas.height) * view.vp_h;
+            let nx = (event.clientX / canvas.width) * view.vp_w;
+            let dx = x - nx;
+            let dy = y - ny;
+            view.vp_ox = clamp(view.vp_ox + dx, view.UNIVERSE_WIDTH - view.vp_w, 0);
+            view.vp_oy = clamp(view.vp_oy + dy, view.UNIVERSE_WIDTH - view.vp_h, 0);
+        }
+        view.drawGrid();
+    }
+
     handleMouseUp = () => {
         this.isDragging = false;
     }
 
     init() {
+        this.view.canvas.addEventListener("wheel", this.handleWheel);
         this.view.canvas.addEventListener("mouseup", this.handleMouseUp);
         this.view.canvas.addEventListener("mousedown", this.handleMouseDown);
         this.view.canvas.addEventListener("mousemove", this.handleMouseMove);
@@ -61,6 +87,7 @@ export class MouseHandler {
 
 export class View {
     public canvas: HTMLCanvasElement;
+    public mode_box: HTMLElement;
     public ctx: CanvasRenderingContext2D;
     public universe: Universe;
     public grid: Uint8Array | null;
@@ -78,6 +105,7 @@ export class View {
 
     constructor(id: string, width: number, height: number, block_size: number, levels: number) {
         this.canvas = document.getElementById(id)! as HTMLCanvasElement
+        this.mode_box = document.getElementById("mode-indicator")!;
         this.canvas.height = height;
         this.canvas.width = width;
         this.animation_id = null;
@@ -95,18 +123,24 @@ export class View {
         this.NUM_ROWS = 1 << levels;
         this.UNIVERSE_WIDTH = block_size * this.NUM_ROWS;
 
-        this.update_grid();
+        this.updateGrid();
     }
 
-    update_grid() {
+    setMode(mode: string) {
+        this.MODE = mode;
+        this.mode_box.innerText = "--" + mode + "--";
+    }
+
+    updateGrid() {
         let cell_ptr = this.universe.get_cells();
         this.grid = new Uint8Array(memory.buffer, cell_ptr, this.NUM_ROWS * this.NUM_ROWS);
     }
 
 
     drawGrid() {
-        this.update_grid()
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.updateGrid()
+        this.ctx.fillStyle = "#000000";
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.beginPath();
 
         let x_start = Math.ceil(this.vp_ox / this.BLOCK_WIDTH) * this.BLOCK_WIDTH - this.vp_ox;
@@ -124,7 +158,7 @@ export class View {
             this.ctx.moveTo(0, y);
             this.ctx.lineTo(k * this.vp_w, y);
         }
-        this.ctx.strokeStyle = "#CCCCCC";
+        this.ctx.strokeStyle = "#212020";
         this.ctx.stroke();
         this.drawCells()
     }
@@ -139,17 +173,18 @@ export class View {
 
         let k = this.canvas.width / this.vp_w;
         let transformed_block_width = this.BLOCK_WIDTH * k;
-        const radius = this.BLOCK_WIDTH / 1.5;
+        const radius = k * this.BLOCK_WIDTH / 2;
+        this.ctx.fillStyle = '#FFFFFF';
 
         for (let x = k * x_coord_start; x < this.vp_w * k; x += transformed_block_width) {
             for (let y = k * y_coord_start; y < this.vp_h * k; y += transformed_block_width) {
-                if (this.grid![this.to_index(x_ind, y_ind)] == 1) {
+                if (this.grid![this.toIndex(x_ind, y_ind)] == 1) {
                     // this.ctx.fillRect(x, y, k * this.BLOCK_WIDTH, k * this.BLOCK_WIDTH);
-                    let centerX = x + this.BLOCK_WIDTH/2;
-                    let centerY = y + this.BLOCK_WIDTH/2;
+                    let centerX = x + radius;
+                    let centerY = y + radius;
                     // Draw filled circle
                     this.ctx.beginPath();
-                    this.ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                    this.ctx.arc(centerX, centerY, radius * 1.33333, 0, 2 * Math.PI);
                     this.ctx.fill();
                 }
                 y_ind++;
@@ -171,8 +206,13 @@ export class View {
         return [Math.floor(base_x + diff_x), Math.floor(base_y + diff_y)];
     }
 
-    to_index(x: number, y: number) {
+    toIndex(x: number, y: number) {
         return x * this.NUM_ROWS + y;
+    }
+
+    clearUniverse() {
+        this.universe.reset();
+        this.drawGrid();
     }
 
     public render() {
