@@ -12,16 +12,11 @@ mod utils;
 use crate::utils::Timer;
 
 #[wasm_bindgen]
-extern "C" {
-    fn alert(s: &str);
-}
-
-#[wasm_bindgen]
-pub fn greet() {
-    alert("Hello wasm")
-}
-
-#[wasm_bindgen]
+/// The Universe class that will be exposed to JS
+/// 
+/// levels is the number of levels in the quadtree
+/// width is the width of the universe but only the center is active
+/// visible_width is the width of the visible universe
 struct Universe {
     levels: u32,
     width: u32,
@@ -32,28 +27,35 @@ struct Universe {
 }
 
 impl Universe {
+    /// Convert the x, y coordinates to the viewport coordinates
     pub fn to_viewport(&self, x: u32, y: u32) -> (u32, u32) {
         (x - (self.width >> 2), y - (self.width >> 2))
     }
 
+    /// Convert the x, y coordinates to the universe coordinates
     pub fn to_universe(&self, x: u32, y: u32) -> (u32, u32) {
         (x + (self.width >> 2), y + (self.width >> 2))
     }
 
+    /// Convert the x, y coordinates to the linear index for the buffer array
     pub fn to_linear_viewport(&self, x: u32, y: u32) -> u32 {
         self.visible_width * x + y
     }
 
+    /// Convert the x, y coordinates to the linear index for the universe
     pub fn to_linear_universe(&self, x: u32, y: u32) -> u32 {
         self.width * x + y
     }
 
+    /// Get the neighbors of a cell as an iterator
     pub fn iter_neighbors(&self, x: u32, y: u32) -> impl Iterator<Item = (u32, u32)> {
         let dx = [0, 1, 0, -1, 0, 1, 1, -1, -1];
         let dy = [0, 0, 1, 0, -1, 1, -1, -1, 1];
         zip(dx, dy).map(move |(_dx, _dy)| ((x as i32 + _dx) as u32, (y as i32 + _dy) as u32))
     }
 
+    /// Sync the cell manager to the buffer
+    /// Only the cells that are visible are updated
     pub fn sync_to_buf(&mut self) {
         let region = self.cell_manager.root_ref();
         let mut to_add: Vec<(u32, u32)> = Vec::new();
@@ -87,6 +89,7 @@ impl Universe {
 
 #[wasm_bindgen]
 impl Universe {
+    /// Create a new Universe with the given number of levels
     pub fn new(levels: u32) -> Self {
         utils::set_panic_hook();
         let width = 1 << levels;
@@ -103,6 +106,7 @@ impl Universe {
         }
     }
 
+    /// Toggle the cell at the given x, y coordinates
     pub fn toggle(&mut self, x: u32, y: u32) {
         let (nx, ny) = self.to_universe(x, y);
         self.cell_manager.toggle(nx, ny);
@@ -126,17 +130,20 @@ impl Universe {
         }
     }
 
+    /// Take the simulation forward by one time step
     pub fn tick(&mut self) {
         self.cell_manager.step();
         self.sync_to_buf();
     }
 
-    // pub fn get_state_at_index(x: u32, y: u32) {}
 
+    /// Get the cells as a pointer for the JS side
+    /// refer to https://rustwasm.github.io/docs/book/game-of-life/testing.html
     pub fn get_cells(&self) -> *const u8 {
         self.cells.as_ptr()
     }
 
+    /// Reset the universe
     pub fn reset(&mut self) {
         self.cells = (0..self.visible_width * self.visible_width)
             .map(|_| 0)
