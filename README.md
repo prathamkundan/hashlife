@@ -4,7 +4,7 @@ This repository contains the implementation of HashLife algorithm in Rust, visua
 
 ## HashLife Algorithm
 
-The hash life algorithm is a space and time compression algorithm that is capable of simulating very large cellular automata efficiently. It was proposed by Bill Gosper in the paper titled [Exploiting Regularities In Large Cellular Spaces ](https://www.lri.fr/~filliatr/m1/gol/gosper-84.pdf). A demo can be found [here](https://copy.sh/life/).
+The hash life algorithm is a space and time compression algorithm that is capable of simulating very large cellular automata efficiently. It was proposed by Bill Gosper in the paper titled [Exploiting Regularities In Large Cellular Spaces ](https://www.lri.fr/~filliatr/m1/gol/gosper-84.pdf). A demo can be found [here](https://prathamkundan.github.io/hashlife/).
 
 ## Development
 ### Prerequisites to build
