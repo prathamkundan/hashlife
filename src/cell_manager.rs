@@ -304,7 +304,7 @@ impl CellManager {
             }
         }
 
-        /// probably not needed
+        // probably not needed
         if result.is_dead() {
             self.nf.get_empty(curr_size)
         } else {

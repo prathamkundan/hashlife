@@ -34,4 +34,4 @@ impl<'a> Drop for Timer<'a> {
 //     ( $( $t:tt )* ) => {
 //         web_sys::console::log_1(&format!( $( $t )* ).into());
 //     }
-// } 
+// }

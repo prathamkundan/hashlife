@@ -7,6 +7,7 @@ mod cell;
 mod cell_factory;
 mod cell_manager;
 use cell_manager::CellManager;
+mod gol;
 
 mod utils;
 use crate::utils::Timer;
@@ -57,13 +58,13 @@ impl Universe {
     /// Sync the cell manager to the buffer
     /// Only the cells that are visible are updated
     pub fn sync_to_buf(&mut self) {
-        let region = self.cell_manager.root_ref();
+        let root = self.cell_manager.root_ref();
         let mut to_add: Vec<(u32, u32)> = Vec::new();
         for cell in &self.update_indices {
             let (x, y) = (cell / self.width, cell % self.width);
             let (vx, vy) = self.to_viewport(x, y);
             let actual = self.to_linear_viewport(vx, vy) as usize;
-            match region.state_at(x, y) {
+            match root.state_at(x, y) {
                 cell::Leaf::Dead => {
                     if actual <= self.cells.len() {
                         self.cells[actual] = 0;
