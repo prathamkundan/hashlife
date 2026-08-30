@@ -19,6 +19,76 @@ canvas {
   background-color: #ffffff;
 }
 
+.hud {
+  position: fixed;
+  bottom: 60px;
+  left: 20px;
+  top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: monospace;
+  z-index: 2;
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.mode-btn {
+  padding: 6px 16px;
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  border: 1px solid #555;
+  background-color: #ffffff;
+  color: #000;
+  border-radius: 4px;
+}
+
+.mode-btn.active {
+  background-color: #2e5f2e;
+  color: #ffffff;
+  border-color: #2e5f2e;
+}
+
+.gen-display {
+  color: #ffffff;
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.advance-control {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.advance-control input {
+  width: 90px;
+  padding: 6px;
+  font-family: monospace;
+  font-size: 14px;
+  border: 1px solid #555;
+  border-radius: 4px;
+}
+
+.advance-control button {
+  padding: 6px 12px;
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  border: 1px solid #555;
+  background-color: #ffffff;
+  color: #000;
+  border-radius: 4px;
+}
+
 .fps-stats {
   white-space: pre;
   display: flex;

@@ -1,47 +1,51 @@
 import '../styles/styles.css';
-import { View } from './canvas';
+import { MODE_EDIT, MODE_PAN, View } from './canvas';
 import { MouseHandler } from './handler';
 
 const container = document.getElementById('canvas-container')! as HTMLElement;
 const BLOCK_WIDTH = 10;
 let animation_id: number | null = null;
 
-const view = new View('game-of-life-canvas', container.clientWidth, container.clientHeight, BLOCK_WIDTH, 10);
+const view = new View('game-of-life-canvas', container.clientWidth, container.clientHeight, BLOCK_WIDTH, 30);
 const eh = new MouseHandler(view)
 
 function handleKeyDown(event: KeyboardEvent) {
     switch (event.code) {
         case "Space":
-            view.setMode("NORMAL");
             if (animation_id === null) {
-                // console.log("Play");
                 run();
             } else {
-                // console.log("Pause");
                 cancelAnimationFrame(animation_id)
                 animation_id = null;
             }
             break;
         case "KeyI":
-            if (view.MODE !== 'INSERT') {
-                view.setMode("INSERT");
-            } else {
-                view.setMode("NORMAL");
-            }
+            view.setMode(view.MODE === MODE_EDIT ? MODE_PAN : MODE_EDIT);
             break;
         case "Escape":
-            view.setMode("NORMAL");
+            view.setMode(MODE_PAN);
             break;
         case "KeyR":
-            // console.log("R Pressed")
-            if (view.MODE === "INSERT") view.clearUniverse();
+            if (view.MODE === MODE_EDIT) view.clearUniverse();
             break;
         default:
-            // Handle other keys if needed
             break;
     }
 }
 
+// Arbitrary generation advance: step the sim by the input amount.
+const stepBtn = document.getElementById('step-btn')!;
+const stepAmount = document.getElementById('step-amount')! as HTMLInputElement;
+function handleStep() {
+    const n = Math.max(1, Math.floor(Number(stepAmount.value) || 1));
+    view.universe.step(n);
+    view.updateGen();
+    view.render();
+}
+stepBtn.addEventListener('click', handleStep);
+stepAmount.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleStep();
+});
 
 window.addEventListener('keydown', handleKeyDown);
 
@@ -49,7 +53,7 @@ window.addEventListener('resize', () => {
     let width = Math.round(container.clientWidth / 10) * BLOCK_WIDTH;
     let height = Math.round(container.clientHeight / 10) * BLOCK_WIDTH;
     view.setCanvasDimensions(width, height);
-    view.drawGrid();
+    view.render();
 });
 
 class FPS {
@@ -102,6 +106,7 @@ const fps = new FPS();
 eh.init();
 function run() {
     view.universe.tick();
+    view.updateGen();
     fps.render();
     view.render();
     animation_id = requestAnimationFrame(run);
