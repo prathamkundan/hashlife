@@ -1,4 +1,4 @@
-import { View } from "./canvas";
+import { MODE_EDIT, MODE_PAN, View } from "./canvas";
 
 function clamp(x: number, max: number, min: number) {
     return Math.max(min, Math.min(x, max));
@@ -18,17 +18,17 @@ export class MouseHandler {
     handleMouseMove = (event: MouseEvent) => {
         const view = this.view;
 
-        if (view.MODE == "NORMAL" && this.isDragging) {
+        if (view.MODE == MODE_PAN && this.isDragging) {
             const deltaX = event.clientX - this.dragStartX;
             const deltaY = event.clientY - this.dragStartY;
-            let k = view.canvas.width / view.vp_w;
-            view.vp_ox = clamp(view.vp_ox - deltaX / k, view.UNIVERSE_WIDTH - view.vp_w, 0);
-            view.vp_oy = clamp(view.vp_oy - deltaY / k, view.UNIVERSE_WIDTH - view.vp_h, 0);
+            // Grab: content follows the cursor.
+            view.center_x -= deltaX / view.scale;
+            view.center_y -= deltaY / view.scale;
             this.dragStartX = event.clientX;
             this.dragStartY = event.clientY;
             view.render();
-        } else if (view.MODE == "INSERT" && this.isDragging) {
-            let [x, y] = view.locToIndex(event.clientX, event.clientY);
+        } else if (view.MODE == MODE_EDIT && this.isDragging) {
+            let [x, y] = view.screenToWorld(event.clientX, event.clientY);
             if ([x, y].toString() === this.lastToggled.toString()) return;
             view.universe.toggle(x, y);
             this.lastToggled = [x, y]
@@ -42,10 +42,9 @@ export class MouseHandler {
         this.dragStartX = event.clientX;
         this.dragStartY = event.clientY;
 
-        if (view.MODE == "INSERT") {
-            let [x, y] = view.locToIndex(event.clientX, event.clientY);
+        if (view.MODE == MODE_EDIT) {
+            let [x, y] = view.screenToWorld(event.clientX, event.clientY);
             view.universe.toggle(x, y);
-            // console.log(x, y)
             view.render();
         }
     }
@@ -54,22 +53,17 @@ export class MouseHandler {
         const canvas = this.view.canvas;
         const view = this.view;
         const wheelDelta = event.deltaY > 0 ? 1.1 : 0.9;
-        let x = (event.clientX / canvas.width) * view.vp_w;
-        let y = (event.clientY / canvas.height) * view.vp_h;
-        if (view.vp_w * wheelDelta > this.view.UNIVERSE_WIDTH || view.vp_w * wheelDelta < 10 * this.view.BLOCK_WIDTH
-            || view.vp_h * wheelDelta > view.UNIVERSE_WIDTH || view.vp_h * wheelDelta < 10 * view.BLOCK_WIDTH) {
-        }
-        else {
-            view.vp_w *= wheelDelta;
-            view.vp_h *= wheelDelta;
-            let ny = (event.clientY / canvas.height) * view.vp_h;
-            let nx = (event.clientX / canvas.width) * view.vp_w;
-            let dx = x - nx;
-            let dy = y - ny;
-            view.vp_ox = clamp(view.vp_ox + dx, view.UNIVERSE_WIDTH - view.vp_w, 0);
-            view.vp_oy = clamp(view.vp_oy + dy, view.UNIVERSE_WIDTH - view.vp_h, 0);
-        }
-        view.drawGrid();
+
+        const wx = view.center_x + (event.clientX - canvas.width / 2) / view.scale;
+        const wy = view.center_y + (event.clientY - canvas.height / 2) / view.scale;
+
+        view.scale = clamp(view.scale / wheelDelta, 100, 1e-3);
+
+        // Keep the world point under the cursor fixed while zooming.
+        view.center_x = wx - (event.clientX - canvas.width / 2) / view.scale;
+        view.center_y = wy - (event.clientY - canvas.height / 2) / view.scale;
+
+        view.render();
     }
 
     handleMouseUp = () => {

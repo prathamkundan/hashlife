@@ -19,6 +19,41 @@ resolution rather than the population or world size.
 4. JS wraps the pointer in an `ImageData` and calls `putImageData` — a single
    blit, no per-cell drawing.
 
+### Interface (decided)
+- `window` becomes an **instance method** on `Universe`:
+  `fn window(&self, nw: Coordinate, se: Coordinate, vpw: u32, vph: u32, window: &mut [u8])`.
+  The **tree walk lives inside `window`**; no region/pop accessor is added to
+  the trait — `window` descends the quadtree itself and reads `Node::pop()`
+  (already cached) directly. `vpw`/`vph` are passed explicitly (the slice length
+  alone can't determine both dimensions of a non-square viewport).
+- `HashLifeUniverse` implements `window`. All cell reads go through the
+  existing `Grid::at` / internal `Rc<Node>` access, no public API additions.
+- wasm exposure: `HashLifeUniverse` is not `#[wasm_bindgen]` and doesn't need
+  to be. A **thin wasm wrapper** owns a `HashLifeUniverse` plus the **fixed
+  `Vec<u8>` pixel buffer**, and exposes `rasterize(nw, se, vpw, vph) -> usize`
+  (writes the buffer, returns `buffer.as_ptr()`). Returning the raw address is
+  the same pattern as the existing `get_cells()` in `lib.rs`, so it marshals
+  cleanly to JS as a `usize`.
+- **Buffer lifetime/aliasing rules** (safe use of the returned address):
+  - The `Vec<u8>` buffer is allocated **once** at fixed `vpw*vph*4` and never
+    reallocated during steady-state rendering. It must not be pushed/grown.
+  - JS **rebuilds the view from `memory.buffer` each frame** (never caches it),
+    because any wasm `memory.grow()` (e.g. from the hashlife node caches)
+    invalidates a previously captured `ArrayBuffer`.
+  - `rasterize` and the returned pointer must target the same buffer: JS uses
+    the pointer returned from the *same* call, sized `vpw*vph*4`.
+
+### wasm wrapper (implemented in `src/lib.rs`)
+- `Universe` is now a `#[wasm_bindgen]` struct holding `HashLifeUniverse` plus
+  the fixed `Vec<u8>` RGBA buffer. Public API:
+  - `new(levels: u32, vpw: u32, vph: u32) -> Universe`
+  - `rasterize(nw_x, nw_y, se_x, se_y) -> usize` (fills buffer, returns ptr)
+  - `buffer_ptr() -> usize`, `buffer_len() -> usize`
+  - `toggle(x, y)`, `tick()`, `step(by)`, `reset()`, `generation()`, `population()`
+- `HashLifeUniverse` gained `toggle(loc)` (delegates to `node_manager.toggle`).
+- `window` is invoked from the wrapper with the fixed buffer; the returned
+  pointer is the address JS wraps in an `ImageData`.
+
 ### Zoom-adaptive rasterization (the core optimization)
 - The buffer is always `vpw x vph` pixels; zooming changes how many world cells
   each pixel represents, never the pixel count.

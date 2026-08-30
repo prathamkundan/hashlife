@@ -13,7 +13,7 @@ pub struct HashLifeUniverse {
 
 impl Universe for HashLifeUniverse {
     fn population(&self) -> usize {
-        return self.root.pop()
+        return self.root.pop();
     }
 
     fn generation(&self) -> u64 {
@@ -31,6 +31,7 @@ impl Universe for HashLifeUniverse {
     }
 
     fn step_by_pow(&mut self, by: u8) {
+        console_error_panic_hook::set_once();
         let root = self.node_manager.expand(self.root.clone());
         self.root = self.result(root, by);
         self.generation += 1u64 << by;
@@ -42,6 +43,15 @@ impl Universe for HashLifeUniverse {
 
     fn root_level(&self) -> u8 {
         self.root.level()
+    }
+
+    fn window(&self, nw: Coordinate, se: Coordinate, vpw: u32, vph: u32, window: &mut [u8]) {
+        self.rasterize(nw, se, vpw, vph, window);
+    }
+
+    fn toggle(&mut self, loc: Coordinate) {
+        let root = self.root.clone();
+        self.root = self.node_manager.toggle(root, loc);
     }
 }
 
@@ -58,7 +68,11 @@ impl HashLifeUniverse {
     }
 
     pub fn result(&mut self, node: Rc<Node>, pow: u8) -> Rc<Node> {
-        debug_assert!(pow <= node.level()-2);
+        debug_assert!(pow <= node.level() - 2);
+        if node.is_empty() {
+            return self.node_manager.empty(node.level() - 1);
+        }
+
         let key = CellKey::for_cell(node.clone());
         if let Some(node) = self.node_manager.result_lookup.get(&(key.clone(), pow)) {
             return node.clone();
@@ -137,9 +151,13 @@ impl HashLifeUniverse {
         let new_sw = self.node_manager.get_center(sw_im);
         let new_se = self.node_manager.get_center(se_im);
 
-        let result = self.node_manager.get_or_create(new_nw, new_ne, new_sw, new_se);
+        let result = self
+            .node_manager
+            .get_or_create(new_nw, new_ne, new_sw, new_se);
 
-        self.node_manager.result_lookup.insert((key, pow), result.clone());
+        self.node_manager
+            .result_lookup
+            .insert((key, pow), result.clone());
         return result;
     }
 
@@ -155,7 +173,11 @@ impl HashLifeUniverse {
         // Hash-consed cache: looked up by the node's 4 quadrant pointers.
         let key = CellKey::for_cell(node.clone());
 
-        if let Some(cached) = self.node_manager.result_lookup.get(&(key.clone(), level - 2)) {
+        if let Some(cached) = self
+            .node_manager
+            .result_lookup
+            .get(&(key.clone(), level - 2))
+        {
             return cached.clone();
         }
 
@@ -219,11 +241,184 @@ impl HashLifeUniverse {
             let new_sw = self._result(sw_im);
             let new_se = self._result(se_im);
 
-            self.node_manager.get_or_create(new_nw, new_ne, new_sw, new_se)
+            self.node_manager
+                .get_or_create(new_nw, new_ne, new_sw, new_se)
         };
 
-        self.node_manager.result_lookup.insert((key, level - 2), result.clone());
+        self.node_manager
+            .result_lookup
+            .insert((key, level - 2), result.clone());
         result
+    }
+}
+
+const RGBA_DEAD: [u8; 4] = [0, 0, 0, 255];
+const RGBA_LIVE: [u8; 4] = [255, 255, 255, 255];
+
+/// A pixel-aligned rectangle in the output buffer.
+struct PixelSpan {
+    lo: i64,
+    hi: i64,
+}
+
+impl PixelSpan {
+    /// Clamp a world-space span to the buffer bounds `[0, px_extent)`.
+    fn clip(&self, px_extent: i64) -> PixelSpan {
+        PixelSpan {
+            lo: self.lo.max(0),
+            hi: self.hi.min(px_extent),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.lo >= self.hi
+    }
+}
+
+/// The viewport being rasterized: its world-space corner and both its world
+/// and pixel extents. All world coordinates are `i64` because the intermediate
+/// `world_offset * px_extent` product can exceed `i32`.
+struct Viewport {
+    nw: Coordinate,
+    world_w: i64,
+    world_h: i64,
+    px_w: i64,
+    px_h: i64,
+}
+
+impl Viewport {
+    fn new(nw: Coordinate, se: Coordinate, vpw: u32, vph: u32) -> Option<Viewport> {
+        let world_w = i64::from(se.x) - i64::from(nw.x);
+        let world_h = i64::from(se.y) - i64::from(nw.y);
+        if world_w <= 0 || world_h <= 0 || vpw == 0 || vph == 0 {
+            return None;
+        }
+        Some(Viewport {
+            nw,
+            world_w,
+            world_h,
+            px_w: i64::from(vpw),
+            px_h: i64::from(vph),
+        })
+    }
+
+    /// Pixel column span of the world-x range `[x_start, x_end)`.
+    /// The low edge maps to the first pixel touched (floor); the high edge to
+    /// one past the last pixel touched (ceil), so adjacent nodes stay contiguous.
+    fn span_x(&self, x_start: i64, x_end: i64) -> PixelSpan {
+        PixelSpan {
+            lo: self.x_to_px(x_start, false),
+            hi: self.x_to_px(x_end, true),
+        }
+    }
+
+    /// Pixel row span of the world-y range `[y_start, y_end)`.
+    fn span_y(&self, y_start: i64, y_end: i64) -> PixelSpan {
+        PixelSpan {
+            lo: self.y_to_px(y_start, false),
+            hi: self.y_to_px(y_end, true),
+        }
+    }
+
+    fn x_to_px(&self, w: i64, hi: bool) -> i64 {
+        Self::world_to_px(w, i64::from(self.nw.x), self.world_w, self.px_w, hi)
+    }
+
+    fn y_to_px(&self, w: i64, hi: bool) -> i64 {
+        Self::world_to_px(w, i64::from(self.nw.y), self.world_h, self.px_h, hi)
+    }
+
+    /// Map a world coordinate `w` to a pixel coordinate relative to the viewport
+    /// origin `o`. `hi=false` floors (first pixel), `hi=true` ceils (last+1).
+    fn world_to_px(w: i64, o: i64, world_extent: i64, px_extent: i64, hi: bool) -> i64 {
+        let n = w - o;
+        if hi {
+            // ceil(n * px_extent / world_extent) = -floor(-n * px_extent / world_extent)
+            -(-n * px_extent).div_euclid(world_extent)
+        } else {
+            // floor(n * px_extent / world_extent)
+            (n * px_extent).div_euclid(world_extent)
+        }
+    }
+}
+
+/// The draw state passed through the tree walk: the viewport plus the RGBA
+/// buffer being written.
+struct Raster<'a> {
+    viewport: Viewport,
+    buf: &'a mut [u8],
+}
+
+impl<'a> Raster<'a> {
+    /// Fill a clipped pixel rectangle with a solid RGBA color.
+    fn fill_rect(&mut self, span_x: &PixelSpan, span_y: &PixelSpan, alive: bool) {
+        let color = if alive { RGBA_LIVE } else { RGBA_DEAD };
+        for py in span_y.lo..span_y.hi {
+            let row = (py * self.viewport.px_w + span_x.lo) as usize * 4;
+            for px in span_x.lo..span_x.hi {
+                let i = row + (px - span_x.lo) as usize * 4;
+                self.buf[i..i + 4].copy_from_slice(&color);
+            }
+        }
+    }
+
+    /// Recursively draw `node`, which covers the world square of size `side`
+    /// rooted at `pos`, into the buffer pixels it spans.
+    fn draw_node(&mut self, node: &Rc<Node>, pos: Coordinate, side: i64) {
+        let x = i64::from(pos.x);
+        let y = i64::from(pos.y);
+        let sx = self.viewport.span_x(x, x + side).clip(self.viewport.px_w);
+        let sy = self.viewport.span_y(y, y + side).clip(self.viewport.px_h);
+        if sx.is_empty() || sy.is_empty() {
+            return; // off-screen
+        }
+
+        match &**node {
+            Node::Empty(_) => {
+                // Blank region: fill the whole span at once and stop.
+                self.fill_rect(&sx, &sy, false);
+            }
+            Node::Leaf(state) => {
+                self.fill_rect(&sx, &sy, *state == 1);
+            }
+            Node::Cell { nw, ne, sw, se, .. } => {
+                // If the whole node collapses to a single pixel, emit its pop.
+                if sx.hi - sx.lo <= 1 && sy.hi - sy.lo <= 1 {
+                    self.fill_rect(&sx, &sy, node.pop() > 0);
+                    return;
+                }
+                let half = side / 2;
+                self.draw_node(nw, pos, half);
+                self.draw_node(ne, Coordinate { x: pos.x + half as i32, y: pos.y }, half);
+                self.draw_node(sw, Coordinate { x: pos.x, y: pos.y + half as i32 }, half);
+                self.draw_node(se, Coordinate { x: pos.x + half as i32, y: pos.y + half as i32 }, half);
+            }
+        }
+    }
+}
+
+impl HashLifeUniverse {
+    /// Rasterize the viewport `[nw, se)` into the RGBA `buf` (size `vpw x vph`,
+    /// row-major, `vpw*vph*4` bytes).
+    ///
+    /// A single tree-guided walk: descend from the root and, per node, compute
+    /// the screen pixel span it covers. Empty subtrees fill their whole span as
+    /// dark in one shot (skipping blank regions), and any node that collapses to
+    /// a single pixel emits lit/dark from its cached `pop()` (stopping high when
+    /// zoomed out). Work scales with the number of nodes intersecting the
+    /// viewport, not with the population or the raw pixel count.
+    pub fn rasterize(&self, nw: Coordinate, se: Coordinate, vpw: u32, vph: u32, buf: &mut [u8]) {
+        buf.fill(0);
+        let Some(viewport) = Viewport::new(nw, se, vpw, vph) else {
+            return;
+        };
+        let side = 1i64 << self.root.level();
+        let root_pos = Coordinate {
+            x: -(side as i32 / 2),
+            y: -(side as i32 / 2),
+        };
+        let mut rast = Raster { viewport, buf };
+        rast.draw_node(&self.root, root_pos, side);
     }
 }
 
@@ -269,14 +464,7 @@ pub enum Node {
 impl Node {
     pub fn level(&self) -> u8 {
         match self {
-            Node::Cell {
-                level,
-                nw: _,
-                ne: _,
-                sw: _,
-                se: _,
-                pop: _,
-            } => *level,
+            Node::Cell { level, .. } => *level,
             Node::Leaf(_) => 0,
             Node::Empty(level) => *level,
         }
@@ -288,14 +476,9 @@ impl Node {
 
     pub fn is_empty(&self) -> bool {
         match self {
-            Node::Cell {
-                level: _,
-                nw,
-                ne,
-                sw,
-                se,
-                pop: _,
-            } => nw.is_empty() && ne.is_empty() && sw.is_empty() && se.is_empty(),
+            Node::Cell { nw, ne, sw, se, .. } => {
+                nw.is_empty() && ne.is_empty() && sw.is_empty() && se.is_empty()
+            }
             Node::Leaf(state) => *state == 0,
             Node::Empty(_) => true,
         }
@@ -319,14 +502,7 @@ impl Node {
 
     pub fn pop(&self) -> usize {
         match self {
-            Node::Cell {
-                level: _,
-                nw: _,
-                ne: _,
-                sw: _,
-                se: _,
-                pop,
-            } => *pop,
+            Node::Cell { pop, .. } => *pop,
             Node::Leaf(state) => usize::from(*state),
             Node::Empty(_) => 0,
         }
@@ -342,7 +518,7 @@ impl Grid for Rc<Node> {
                 ne,
                 sw,
                 se,
-                pop: _,
+                ..
             } => {
                 // The child of level `L` has a half-size of 2^(L-2).
                 let half_sub = if *level >= 2 { 1 << (*level - 2) } else { 0 };
@@ -398,7 +574,7 @@ impl CellKey {
                 ne,
                 sw,
                 se,
-                pop: _,
+                ..
             } => CellKey {
                 level: *level,
                 nw: Rc::as_ptr(nw) as usize,
@@ -511,7 +687,7 @@ impl HashlifeNodeManager {
                 ne,
                 sw,
                 se,
-                pop: _,
+                ..
             } => self.toggle_in_cell(*level, nw.clone(), ne.clone(), sw.clone(), se.clone(), loc),
             Node::Leaf(state) => {
                 if *state == 1 {
@@ -894,5 +1070,83 @@ mod tests {
         assert_eq!(uni.root.at(&C(1, 0)), 1, "right blinker cell");
         assert_eq!(uni.root.at(&C(0, -1)), 0);
         assert_eq!(uni.root.at(&C(0, 1)), 0);
+    }
+
+    fn pixel(buf: &[u8], vpw: u32, px: u32, py: u32) -> (u8, u8, u8, u8) {
+        let i = ((py * vpw + px) * 4) as usize;
+        (buf[i], buf[i + 1], buf[i + 2], buf[i + 3])
+    }
+
+    fn assert_dark(buf: &[u8], vpw: u32, px: u32, py: u32) {
+        assert_eq!(pixel(buf, vpw, px, py), (0, 0, 0, 255), "pixel ({px},{py})");
+    }
+
+    fn assert_live(buf: &[u8], vpw: u32, px: u32, py: u32) {
+        assert_eq!(
+            pixel(buf, vpw, px, py),
+            (255, 255, 255, 255),
+            "pixel ({px},{py})"
+        );
+    }
+
+    /// Build a horizontal blinker at the origin: cells (-1,0),(0,0),(1,0).
+    fn blinker(nm: &mut HashlifeNodeManager) -> Rc<Node> {
+        let on = [(-1, 0), (0, 0), (1, 0)];
+        build8x8(nm, &on)
+    }
+
+    #[test]
+    fn test_window_zoomed_in_upscale() {
+        let mut uni = HashLifeUniverse::new(4);
+        let g = blinker(&mut uni.node_manager);
+        uni.root = g;
+        // Viewport = world [-4,4) x [-4,4) mapped to 8x8 buffer => 1:1 (one
+        // cell per pixel). The blinker occupies y=0, x in {-1,0,1}.
+        // Pixel px = world_x + 4, py = world_y + 4.
+        let vpw = 8;
+        let vph = 8;
+        let mut buf = vec![0u8; (vpw * vph * 4) as usize];
+        uni.window(C(-4, -4), C(4, 4), vpw, vph, &mut buf);
+        assert_live(&buf, vpw, 3, 4); // x=-1
+        assert_live(&buf, vpw, 4, 4); // x=0
+        assert_live(&buf, vpw, 5, 4); // x=1
+        assert_dark(&buf, vpw, 4, 3); // y=-1
+        assert_dark(&buf, vpw, 4, 5); // y=1
+    }
+
+    #[test]
+    fn test_window_zoomed_out_pop() {
+        let mut uni = HashLifeUniverse::new(4);
+        let g = blinker(&mut uni.node_manager);
+        uni.root = g;
+        // Zoom out: whole 8x8 world onto a 4x4 buffer. Each pixel covers a 2x2
+        // cell block. The blinker touches the block around the center, so the
+        // center-ish pixel should be lit; a corner pixel should be dark.
+        let vpw = 4;
+        let vph = 4;
+        let mut buf = vec![0u8; (vpw * vph * 4) as usize];
+        uni.window(C(-4, -4), C(4, 4), vpw, vph, &mut buf);
+        // px=2 (x -4..0), py=2 (y -4..0): contains (0,0)? x block [-4,0), y [-4,0)
+        // contains (-1,0),(0,0),(1,0)? x=-1,0 in [-4,0): yes -> lit.
+        assert_live(&buf, vpw, 2, 2);
+        // px=0 (x -4,-2), py=0 (y -4,-2): corner, no cells -> dark.
+        assert_dark(&buf, vpw, 0, 0);
+    }
+
+    #[test]
+    fn test_window_mixed_ratio() {
+        let mut uni = HashLifeUniverse::new(4);
+        let g = blinker(&mut uni.node_manager);
+        uni.root = g;
+        // Non-square viewport vs buffer ratio: world 8 wide, 4 tall onto an
+        // 16x4 buffer (zoomed in on x, 1:1 on y).
+        let vpw = 16;
+        let vph = 4;
+        let mut buf = vec![0u8; (vpw * vph * 4) as usize];
+        uni.window(C(-4, -2), C(4, 2), vpw, vph, &mut buf);
+        // Cell (0,0) -> px = (0 - (-4)) * 16 / 8 = 8, py = (0 - (-2)) * 4 / 4 = 2.
+        assert_live(&buf, vpw, 8, 2);
+        // Cell (-4,-2) corner -> px = 0, py = 0, dark.
+        assert_dark(&buf, vpw, 0, 0);
     }
 }

@@ -1,155 +1,97 @@
 extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
-use std::{collections::BTreeSet, iter::zip};
-
-mod cell;
-mod cell_factory;
-mod cell_manager;
-use cell_manager::CellManager;
 mod gol;
 
 mod utils;
-use crate::utils::Timer;
 
+use gol::hashlife::HashLifeUniverse;
+use gol::{Coordinate, Universe as _, C};
+
+/// wasm-exposed wrapper around the hash life universe plus a fixed RGBA pixel
+/// buffer for rasterized rendering.
+///
+/// The buffer is `vpw x vph` RGBA (row-major, `vpw*vph*4` bytes), allocated
+/// once in `new` and never resized during steady-state rendering, so the
+/// pointer returned by `buffer_ptr`/`rasterize` stays stable as long as wasm
+/// memory does not grow.
 #[wasm_bindgen]
-/// The Universe class that will be exposed to JS
-/// 
-/// levels is the number of levels in the quadtree
-/// width is the width of the universe but only the center is active
-/// visible_width is the width of the visible universe
-struct Universe {
-    levels: u32,
-    width: u32,
-    visible_width: u32,
-    cells: Vec<u8>,
-    cell_manager: CellManager,
-    update_indices: BTreeSet<u32>,
-}
-
-impl Universe {
-    /// Convert the x, y coordinates to the viewport coordinates
-    pub fn to_viewport(&self, x: u32, y: u32) -> (u32, u32) {
-        (x - (self.width >> 2), y - (self.width >> 2))
-    }
-
-    /// Convert the x, y coordinates to the universe coordinates
-    pub fn to_universe(&self, x: u32, y: u32) -> (u32, u32) {
-        (x + (self.width >> 2), y + (self.width >> 2))
-    }
-
-    /// Convert the x, y coordinates to the linear index for the buffer array
-    pub fn to_linear_viewport(&self, x: u32, y: u32) -> u32 {
-        self.visible_width * x + y
-    }
-
-    /// Convert the x, y coordinates to the linear index for the universe
-    pub fn to_linear_universe(&self, x: u32, y: u32) -> u32 {
-        self.width * x + y
-    }
-
-    /// Get the neighbors of a cell as an iterator
-    pub fn iter_neighbors(&self, x: u32, y: u32) -> impl Iterator<Item = (u32, u32)> {
-        let dx = [0, 1, 0, -1, 0, 1, 1, -1, -1];
-        let dy = [0, 0, 1, 0, -1, 1, -1, -1, 1];
-        zip(dx, dy).map(move |(_dx, _dy)| ((x as i32 + _dx) as u32, (y as i32 + _dy) as u32))
-    }
-
-    /// Sync the cell manager to the buffer
-    /// Only the cells that are visible are updated
-    pub fn sync_to_buf(&mut self) {
-        let root = self.cell_manager.root_ref();
-        let mut to_add: Vec<(u32, u32)> = Vec::new();
-        for cell in &self.update_indices {
-            let (x, y) = (cell / self.width, cell % self.width);
-            let (vx, vy) = self.to_viewport(x, y);
-            let actual = self.to_linear_viewport(vx, vy) as usize;
-            match root.state_at(x, y) {
-                cell::Leaf::Dead => {
-                    if actual <= self.cells.len() {
-                        self.cells[actual] = 0;
-                    }
-                }
-                _ => {
-                    if actual <= self.cells.len() {
-                        self.cells[actual] = 1;
-                        to_add.push((x, y));
-                    }
-                }
-            }
-        }
-
-        self.update_indices.clear();
-        to_add.iter().for_each(|(x, y)| {
-            self.iter_neighbors(*x, *y).for_each(|(_x, _y)| {
-                self.update_indices.insert(self.to_linear_universe(_x, _y));
-            })
-        });
-    }
+pub struct Universe {
+    inner: HashLifeUniverse,
+    levels: u8,
+    vpw: u32,
+    vph: u32,
+    buffer: Vec<u8>,
 }
 
 #[wasm_bindgen]
 impl Universe {
-    /// Create a new Universe with the given number of levels
-    pub fn new(levels: u32) -> Self {
+    /// Create a new universe with `levels` quadtree levels and a fixed
+    /// `vpw x vph` RGBA render buffer.
+    pub fn new(levels: u32, vpw: u32, vph: u32) -> Universe {
         utils::set_panic_hook();
-        let width = 1 << levels;
-        let visible_width = 1 << (levels - 1);
-        let cells = (0..visible_width * visible_width).map(|_| 0).collect();
-
+        let buffer_len = (vpw * vph * 4) as usize;
         Universe {
-            levels,
-            width,
-            visible_width,
-            cells,
-            cell_manager: CellManager::setup(levels),
-            update_indices: BTreeSet::new(),
+            inner: HashLifeUniverse::new(levels as u8),
+            levels: levels as u8,
+            vpw,
+            vph,
+            buffer: vec![0u8; buffer_len],
         }
     }
 
-    /// Toggle the cell at the given x, y coordinates
-    pub fn toggle(&mut self, x: u32, y: u32) {
-        let (nx, ny) = self.to_universe(x, y);
-        self.cell_manager.toggle(nx, ny);
-
-        let linear_index = self.to_linear_universe(nx, ny);
-        let index = self.to_linear_viewport(x, y) as usize;
-        if self.cells[index] == 1 {
-            // self.iter_neighbors(nx, ny).for_each(|(_nx, _ny)| {
-            //     self.update_indices
-            //         .remove(&self.to_linear_universe(_nx, _ny));
-            // });
-            self.update_indices.remove(&linear_index);
-
-            self.cells[index] = 0 as u8;
-        } else {
-            self.iter_neighbors(nx, ny).for_each(|(_nx, _ny)| {
-                self.update_indices
-                    .insert(self.to_linear_universe(_nx, _ny));
-            });
-            self.cells[index] = 1 as u8;
-        }
+    /// Advance the simulation by `by` generations.
+    pub fn step(&mut self, by: u32) {
+        self.inner.step(by);
     }
 
-    /// Take the simulation forward by one time step
+    /// Advance the simulation by a single generation.
     pub fn tick(&mut self) {
-        self.cell_manager.step();
-        self.sync_to_buf();
+        self.inner.step(1);
     }
 
-
-    /// Get the cells as a pointer for the JS side
-    /// refer to https://rustwasm.github.io/docs/book/game-of-life/testing.html
-    pub fn get_cells(&self) -> *const u8 {
-        self.cells.as_ptr()
+    /// Toggle the cell at world coordinate `(x, y)`.
+    pub fn toggle(&mut self, x: i32, y: i32) {
+        self.inner.toggle(C(x, y));
     }
 
-    /// Reset the universe
+    /// Reset the universe to an empty state.
     pub fn reset(&mut self) {
-        self.cells = (0..self.visible_width * self.visible_width)
-            .map(|_| 0)
-            .collect();
-        self.cell_manager.reset(self.levels);
-        self.sync_to_buf();
+        self.inner = HashLifeUniverse::new(self.levels);
+    }
+
+    /// Rasterize the viewport `[nw, se)` (world coordinates) into the fixed
+    /// RGBA buffer, then return the buffer's address so JS can wrap it in an
+    /// `ImageData`. Returns 0 if the buffer cannot be addressed.
+    pub fn rasterize(&mut self, nw_x: i32, nw_y: i32, se_x: i32, se_y: i32) -> usize {
+        self.inner.window(
+            Coordinate { x: nw_x, y: nw_y },
+            Coordinate { x: se_x, y: se_y },
+            self.vpw,
+            self.vph,
+            &mut self.buffer,
+        );
+        self.buffer.as_ptr() as usize
+    }
+
+    /// Return the address of the fixed RGBA buffer, for re-wrapping the view
+    /// each frame. Size is `vpw*vph*4` bytes.
+    pub fn buffer_ptr(&self) -> usize {
+        self.buffer.as_ptr() as usize
+    }
+
+    /// Return the byte length of the fixed RGBA buffer.
+    pub fn buffer_len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    /// Number of generations the simulation has advanced.
+    pub fn generation(&self) -> u64 {
+        self.inner.generation()
+    }
+
+    /// Total live-cell population of the universe.
+    pub fn population(&self) -> usize {
+        self.inner.population()
     }
 }
