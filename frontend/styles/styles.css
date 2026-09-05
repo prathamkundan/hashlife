@@ -34,6 +34,28 @@ canvas {
 .mode-buttons {
   display: flex;
   gap: 6px;
+  position: relative;
+}
+
+.stats-toggle {
+  top: -10px;
+  left: 0;
+  padding: 2px 6px;
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  border: 1px solid #555;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border-radius: 4px;
+  z-index: 3;
+}
+
+.stats-toggle.active {
+  background-color: #ffffff;
+  color: #000;
+  border-color: #555;
 }
 
 .mode-btn {
@@ -55,6 +77,10 @@ canvas {
 }
 
 .stats-display {
+  display: none;
+  position: fixed;
+  bottom: 240px;
+  left: 20px;
   white-space: pre;
   font-family: monospace;
   color: #ffffff;
@@ -97,6 +123,47 @@ canvas {
   background-color: #ffffff;
   color: #000;
   border-radius: 4px;
+}
+
+.fps-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fps-toggle {
+  padding: 6px 12px;
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  border: 1px solid #555;
+  background-color: #ffffff;
+  color: #000;
+  border-radius: 4px;
+}
+
+.fps-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fps-slider-container input[type="range"] {
+  width: 140px;
+  cursor: pointer;
+}
+
+.fps-slider-container input[type="range"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#fps-label {
+  font-family: monospace;
+  font-size: 14px;
+  color: #fff;
+  min-width: 50px;
 }
 
 #mode-indicator {

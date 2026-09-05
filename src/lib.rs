@@ -2,41 +2,32 @@ extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
 mod gol;
-
 mod utils;
 
 use gol::hashlife::HashLifeUniverse;
 use gol::{Coordinate, Universe as _, C};
 
-/// wasm-exposed wrapper around the hash life universe plus a fixed RGBA pixel
-/// buffer for rasterized rendering.
+/// wasm-exposed wrapper around the hash life universe.
 ///
-/// The buffer is `vpw x vph` RGBA (row-major, `vpw*vph*4` bytes), allocated
-/// once in `new` and never resized during steady-state rendering, so the
-/// pointer returned by `buffer_ptr`/`rasterize` stays stable as long as wasm
-/// memory does not grow.
+/// The render buffer is managed externally: JavaScript allocates a buffer in wasm
+/// memory via `alloc_buffer`, passes its pointer to `rasterize` each frame, and
+/// frees it with `free_buffer` when the viewport is resized. This decouples the
+/// simulation state from the buffer lifetime, so resizing the screen no longer
+/// resets the simulation.
 #[wasm_bindgen]
 pub struct Universe {
     inner: HashLifeUniverse,
     levels: u8,
-    vpw: u32,
-    vph: u32,
-    buffer: Vec<u8>,
 }
 
 #[wasm_bindgen]
 impl Universe {
-    /// Create a new universe with `levels` quadtree levels and a fixed
-    /// `vpw x vph` RGBA render buffer.
-    pub fn new(levels: u32, vpw: u32, vph: u32) -> Universe {
+    /// Create a new universe with `levels` quadtree levels.
+    pub fn new(levels: u32) -> Universe {
         utils::set_panic_hook();
-        let buffer_len = (vpw * vph * 4) as usize;
         Universe {
             inner: HashLifeUniverse::new(levels as u8),
             levels: levels as u8,
-            vpw,
-            vph,
-            buffer: vec![0u8; buffer_len],
         }
     }
 
@@ -60,29 +51,37 @@ impl Universe {
         self.inner = HashLifeUniverse::new(self.levels);
     }
 
-    /// Rasterize the viewport `[nw, se)` (world coordinates) into the fixed
-    /// RGBA buffer, then return the buffer's address so JS can wrap it in an
-    /// `ImageData`. Returns 0 if the buffer cannot be addressed.
-    pub fn rasterize(&mut self, nw_x: i32, nw_y: i32, se_x: i32, se_y: i32) -> usize {
-        self.inner.window(
-            Coordinate { x: nw_x, y: nw_y },
-            Coordinate { x: se_x, y: se_y },
-            self.vpw,
-            self.vph,
-            &mut self.buffer,
+    /// Rasterize the viewport `[nw, se)` (world coordinates) into the caller-provided
+    /// RGBA buffer. The buffer must be `vpw*vph*4` bytes allocated in wasm memory.
+    /// Returns the buffer pointer.
+    pub fn rasterize(
+        &mut self,
+        nw_x: i32,
+        nw_y: i32,
+        se_x: i32,
+        se_y: i32,
+        vpw: u32,
+        vph: u32,
+        buffer_ptr: usize,
+        buffer_len: usize,
+    ) -> usize {
+        assert!(buffer_ptr != 0, "buffer pointer must be non-null");
+        assert_eq!(
+            buffer_len as u64,
+            (vpw as u64) * (vph as u64) * 4,
+            "buffer length must be vpw*vph*4"
         );
-        self.buffer.as_ptr() as usize
-    }
-
-    /// Return the address of the fixed RGBA buffer, for re-wrapping the view
-    /// each frame. Size is `vpw*vph*4` bytes.
-    pub fn buffer_ptr(&self) -> usize {
-        self.buffer.as_ptr() as usize
-    }
-
-    /// Return the byte length of the fixed RGBA buffer.
-    pub fn buffer_len(&self) -> usize {
-        self.buffer.len()
+        unsafe {
+            let buf = std::slice::from_raw_parts_mut(buffer_ptr as *mut u8, buffer_len);
+            self.inner.window(
+                Coordinate { x: nw_x, y: nw_y },
+                Coordinate { x: se_x, y: se_y },
+                vpw,
+                vph,
+                buf,
+            );
+        }
+        buffer_ptr
     }
 
     /// Number of generations the simulation has advanced.
@@ -93,5 +92,29 @@ impl Universe {
     /// Total live-cell population of the universe.
     pub fn population(&self) -> usize {
         self.inner.population()
+    }
+}
+
+/// Allocate a zero-initialized RGBA buffer of `len` bytes in wasm memory.
+/// Returns the pointer; JavaScript must free it with `free_buffer` when done.
+#[wasm_bindgen]
+pub fn alloc_buffer(len: usize) -> usize {
+    assert!(len > 0, "buffer length must be > 0");
+    let layout = std::alloc::Layout::array::<u8>(len).expect("valid layout");
+    unsafe {
+        let ptr = std::alloc::alloc(layout);
+        assert!(!ptr.is_null(), "allocation failed");
+        ptr as usize
+    }
+}
+
+/// Free a buffer previously allocated with `alloc_buffer`.
+#[wasm_bindgen]
+pub fn free_buffer(ptr: usize, len: usize) {
+    assert!(ptr != 0, "buffer pointer must be non-null");
+    assert!(len > 0, "buffer length must be > 0");
+    let layout = std::alloc::Layout::array::<u8>(len).expect("valid layout");
+    unsafe {
+        std::alloc::dealloc(ptr as *mut u8, layout);
     }
 }

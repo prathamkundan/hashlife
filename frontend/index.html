@@ -16,18 +16,28 @@
       </div>
       <div class="info-icon">i</div>
     </div>
-    <div class="hud">
-      <div class="stats-display" id="sim-stats"></div>
-      <div class="mode-buttons" id="mode-buttons">
-        <button id="mode-pan" class="mode-btn active">Pan</button>
-        <button id="mode-edit" class="mode-btn">Edit</button>
-        <button id="mode-play" class="mode-btn">▶</button>
+      <div class="hud">
+        <div class="stats-display" id="sim-stats"></div>
+        <div>
+          <button id="stats-toggle" class="stats-toggle">Stats</button>
+        </div>
+        <div class="mode-buttons" id="mode-buttons">
+          <button id="mode-pan" class="mode-btn active">Pan</button>
+          <button id="mode-edit" class="mode-btn">Edit</button>
+          <button id="mode-play" class="mode-btn">▶</button>
+        </div>
+        <div class="advance-control">
+          <input id="step-amount" type="number" min="1" value="1" />
+          <button id="step-btn">Advance</button>
+        </div>
+        <div class="fps-control">
+          <button id="fps-toggle" class="fps-toggle">GPS: OFF</button>
+          <div class="fps-slider-container">
+            <input id="fps-slider" type="range" min="1" max="240" step="1" value="60" disabled />
+            <span id="fps-label">60 gps</span>
+          </div>
+        </div>
       </div>
-      <div class="advance-control">
-        <input id="step-amount" type="number" min="1" value="1" />
-        <button id="step-btn">Advance</button>
-      </div>
-    </div>
     <div id="canvas-container">
       <canvas id="game-of-life-canvas"></canvas>
     </div>

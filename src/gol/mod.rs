@@ -5,9 +5,6 @@ pub trait Universe {
 
     fn step_by_pow(&mut self, by: u8);
 
-    /// Toggle the state of the cell at world coordinate `loc`.
-    fn toggle(&mut self, loc: Coordinate);
-
     /// Rasterize the region `[nw, se)` into the RGBA `window` buffer of size
     /// `vpw x vph` (row-major, `vpw*vph*4` bytes).
     /// `nw` and `se` are world coordinates of the north-west and south-east
