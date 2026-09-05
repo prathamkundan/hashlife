@@ -22,6 +22,6 @@ Finally, run `npm run start` to start the development server. You can now access
 ## TODO
 - [x] Implement the algorithm
 - [x] Visualize the algorithm
-- [ ] Add time skipping
-- [ ] Make it faster :' )
-- [ ] Improve UI
+- [x] Add time skipping
+- [x] Make it faster :' )
+- [x] Improve UI
