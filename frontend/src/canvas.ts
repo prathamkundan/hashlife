@@ -3,6 +3,7 @@ import { memory } from "wasm-crate/life_new_bg.wasm";
 
 export const MODE_PAN = "PAN";
 export const MODE_EDIT = "EDIT";
+export const MODE_PLAY = "PLAY";
 
 export class View {
     public canvas: HTMLCanvasElement;
@@ -28,7 +29,8 @@ export class View {
     public MODE: string = MODE_PAN;
     private panBtn: HTMLButtonElement;
     private editBtn: HTMLButtonElement;
-    private genBox: HTMLElement;
+    private playBtn: HTMLButtonElement;
+    private fpsRenderFn: (() => void) | null = null;
 
     constructor(id: string, width: number, height: number, pixels_per_cell: number, levels: number) {
         this.canvas = document.getElementById(id)! as HTMLCanvasElement
@@ -43,9 +45,10 @@ export class View {
 
         this.panBtn = document.getElementById('mode-pan')! as HTMLButtonElement;
         this.editBtn = document.getElementById('mode-edit')! as HTMLButtonElement;
-        this.genBox = document.getElementById('gen-value')!;
-        this.panBtn.addEventListener('click', () => this.setMode(MODE_PAN));
-        this.editBtn.addEventListener('click', () => this.setMode(MODE_EDIT));
+        this.playBtn = document.getElementById('mode-play')! as HTMLButtonElement;
+        this.panBtn.addEventListener('click', () => { this._stopPlay(); this.setMode(MODE_PAN); });
+        this.editBtn.addEventListener('click', () => { this._stopPlay(); this.setMode(MODE_EDIT); });
+        this.playBtn.addEventListener('click', () => this.togglePlay());
 
         this.bufW = Math.ceil(width / 2);
         this.bufH = Math.ceil(height / 2);
@@ -69,7 +72,6 @@ export class View {
         this.offscreen.width = this.bufW;
         this.offscreen.height = this.bufH;
         this.universe = Universe.new(this.levels, this.bufW, this.bufH);
-        this.updateGen();
     }
 
     setMode(mode: string) {
@@ -78,9 +80,39 @@ export class View {
         this.editBtn.classList.toggle('active', mode === MODE_EDIT);
     }
 
-    /// Refresh the generation readout from the wasm universe.
-    updateGen() {
-        this.genBox.innerText = String(this.universe.generation());
+    togglePlay() {
+        if (this.animation_id !== null) {
+            cancelAnimationFrame(this.animation_id);
+            this.animation_id = null;
+            this.playBtn.classList.remove('active');
+        } else {
+            this.setMode(MODE_PAN);
+            this._startPlay();
+            this.playBtn.classList.add('active');
+        }
+    }
+
+    private _stopPlay() {
+        if (this.animation_id !== null) {
+            cancelAnimationFrame(this.animation_id);
+            this.animation_id = null;
+            this.playBtn.classList.remove('active');
+        }
+    }
+
+    private _startPlay() {
+        const self = this;
+        function tick() {
+            self.universe.tick();
+            if (self.fpsRenderFn) self.fpsRenderFn();
+            self.render();
+            self.animation_id = requestAnimationFrame(tick);
+        }
+        tick();
+    }
+
+    setFPSRenderFn(fn: () => void) {
+        this.fpsRenderFn = fn;
     }
 
     /// Map a screen (client) point to the world cell under the cursor.
@@ -119,7 +151,6 @@ export class View {
 
     clearUniverse() {
         this.universe.reset();
-        this.updateGen();
         this.render();
     }
 }

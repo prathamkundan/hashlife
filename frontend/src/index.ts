@@ -4,7 +4,6 @@ import { MouseHandler } from './handler';
 
 const container = document.getElementById('canvas-container')! as HTMLElement;
 const BLOCK_WIDTH = 10;
-let animation_id: number | null = null;
 
 const view = new View('game-of-life-canvas', container.clientWidth, container.clientHeight, BLOCK_WIDTH, 30);
 const eh = new MouseHandler(view)
@@ -12,14 +11,10 @@ const eh = new MouseHandler(view)
 function handleKeyDown(event: KeyboardEvent) {
     switch (event.code) {
         case "Space":
-            if (animation_id === null) {
-                run();
-            } else {
-                cancelAnimationFrame(animation_id)
-                animation_id = null;
-            }
+            view.togglePlay();
             break;
         case "KeyI":
+        case "KeyE":
             view.setMode(view.MODE === MODE_EDIT ? MODE_PAN : MODE_EDIT);
             break;
         case "Escape":
@@ -39,7 +34,6 @@ const stepAmount = document.getElementById('step-amount')! as HTMLInputElement;
 function handleStep() {
     const n = Math.max(1, Math.floor(Number(stepAmount.value) || 1));
     view.universe.step(n);
-    view.updateGen();
     view.render();
 }
 stepBtn.addEventListener('click', handleStep);
@@ -56,32 +50,28 @@ window.addEventListener('resize', () => {
     view.render();
 });
 
-class FPS {
-    fps: HTMLElement;
+class SimStats {
+    el: HTMLElement;
     frames: number[];
     lastFrameTimeStamp: number;
 
     constructor() {
-        this.fps = document.getElementById("fps")!;
+        this.el = document.getElementById("sim-stats")!;
         this.frames = [];
         this.lastFrameTimeStamp = performance.now();
     }
 
-    render() {
-        // Convert the delta time since the last frame render into a measure
-        // of frames per second.
+    render(gen: bigint) {
         const now = performance.now();
         const delta = now - this.lastFrameTimeStamp;
         this.lastFrameTimeStamp = now;
         const fps = 1 / delta * 1000;
 
-        // Save only the latest 100 timings.
         this.frames.push(fps);
         if (this.frames.length > 100) {
             this.frames.shift();
         }
 
-        // Find the max, min, and mean of our 100 latest timings.
         let min = Infinity;
         let max = -Infinity;
         let sum = 0;
@@ -92,24 +82,16 @@ class FPS {
         }
         let mean = sum / this.frames.length;
 
-        // Render the statistics.
-        this.fps.textContent = `
-Frames per Second:
-         latest = ${Math.round(fps)}
+        this.el.textContent = `Sim Stats
+Gen: ${gen}
+latest = ${Math.round(fps)}
 avg of last 100 = ${Math.round(mean)}
 min of last 100 = ${Math.round(min)}
 max of last 100 = ${Math.round(max)}
 `.trim();
     }
 }
-const fps = new FPS();
+const stats = new SimStats();
 eh.init();
-function run() {
-    view.universe.tick();
-    view.updateGen();
-    fps.render();
-    view.render();
-    animation_id = requestAnimationFrame(run);
-}
-
+view.setFPSRenderFn(() => stats.render(view.universe.generation()));
 view.render();

@@ -279,10 +279,17 @@ impl PixelSpan {
 /// and pixel extents. All world coordinates are `i64` because the intermediate
 /// `world_offset * px_extent` product can exceed `i32`.
 struct Viewport {
+    /// World top left cell coordinate
     nw: Coordinate,
+
+    /// universe width in cells
     world_w: i64,
+    /// universe height in cells
     world_h: i64,
+
+    /// viewport width in pixels
     px_w: i64,
+    /// viewport height in pixels
     px_h: i64,
 }
 
@@ -320,18 +327,19 @@ impl Viewport {
         }
     }
 
-    fn x_to_px(&self, w: i64, hi: bool) -> i64 {
-        Self::world_to_px(w, i64::from(self.nw.x), self.world_w, self.px_w, hi)
+    fn x_to_px(&self, x: i64, hi: bool) -> i64 {
+        Self::world_to_px(x, i64::from(self.nw.x), self.world_w, self.px_w, hi)
     }
 
-    fn y_to_px(&self, w: i64, hi: bool) -> i64 {
-        Self::world_to_px(w, i64::from(self.nw.y), self.world_h, self.px_h, hi)
+    fn y_to_px(&self, y: i64, hi: bool) -> i64 {
+        Self::world_to_px(y, i64::from(self.nw.y), self.world_h, self.px_h, hi)
     }
 
     /// Map a world coordinate `w` to a pixel coordinate relative to the viewport
     /// origin `o`. `hi=false` floors (first pixel), `hi=true` ceils (last+1).
     fn world_to_px(w: i64, o: i64, world_extent: i64, px_extent: i64, hi: bool) -> i64 {
         let n = w - o;
+        // (number of cells) * (pixels per cell)
         if hi {
             // ceil(n * px_extent / world_extent) = -floor(-n * px_extent / world_extent)
             -(-n * px_extent).div_euclid(world_extent)
@@ -364,7 +372,8 @@ impl<'a> Raster<'a> {
 
     /// Recursively draw `node`, which covers the world square of size `side`
     /// rooted at `pos`, into the buffer pixels it spans.
-    fn draw_node(&mut self, node: &Rc<Node>, pos: Coordinate, side: i64) {
+    fn draw_node(&mut self, node: &Rc<Node>, pos: Coordinate) {
+        let side: i64 = 1 << node.level();
         let x = i64::from(pos.x);
         let y = i64::from(pos.y);
         let sx = self.viewport.span_x(x, x + side).clip(self.viewport.px_w);
@@ -387,11 +396,11 @@ impl<'a> Raster<'a> {
                     self.fill_rect(&sx, &sy, node.pop() > 0);
                     return;
                 }
-                let half = side / 2;
-                self.draw_node(nw, pos, half);
-                self.draw_node(ne, Coordinate { x: pos.x + half as i32, y: pos.y }, half);
-                self.draw_node(sw, Coordinate { x: pos.x, y: pos.y + half as i32 }, half);
-                self.draw_node(se, Coordinate { x: pos.x + half as i32, y: pos.y + half as i32 }, half);
+                let half = side >> 1;
+                self.draw_node(nw, pos);
+                self.draw_node(ne, Coordinate { x: pos.x + half as i32, y: pos.y });
+                self.draw_node(sw, Coordinate { x: pos.x, y: pos.y + half as i32 });
+                self.draw_node(se, Coordinate { x: pos.x + half as i32, y: pos.y + half as i32 });
             }
         }
     }
@@ -418,7 +427,7 @@ impl HashLifeUniverse {
             y: -(side as i32 / 2),
         };
         let mut rast = Raster { viewport, buf };
-        rast.draw_node(&self.root, root_pos, side);
+        rast.draw_node(&self.root, root_pos);
     }
 }
 
@@ -622,7 +631,8 @@ const TRANSFORM: [i32; 4] = [1, -1, 1, -1];
 
 impl HashlifeNodeManager {
     pub fn new(levels: u8) -> HashlifeNodeManager {
-        let mut empty_nodes: Vec<Rc<Node>> = Vec::with_capacity(usize::from(levels));
+        // levels + 1 as we expand the root node and it will fail if empty
+        let mut empty_nodes: Vec<Rc<Node>> = Vec::with_capacity(usize::from(levels + 1));
         for idx in 0..=empty_nodes.capacity() {
             empty_nodes.push(Rc::new(Node::empty(idx as u8)));
         }
@@ -653,7 +663,7 @@ impl HashlifeNodeManager {
     }
 
     pub fn empty(&self, level: u8) -> Rc<Node> {
-        assert!(level <= self.levels, "node manager cannot handle the level");
+        assert!(level as usize <= self.empty_nodes.len(), "node manager cannot handle the level");
         let idx = usize::from(level);
         self.empty_nodes[idx].clone()
     }

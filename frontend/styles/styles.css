@@ -43,23 +43,26 @@ canvas {
   font-weight: bold;
   cursor: pointer;
   border: 1px solid #555;
-  background-color: #ffffff;
-  color: #000;
+  background-color: transparent;
+  color: #fff;
   border-radius: 4px;
 }
 
 .mode-btn.active {
-  background-color: #2e5f2e;
-  color: #ffffff;
-  border-color: #2e5f2e;
+  background-color: #ffffff;
+  color: #000;
+  border-color: #555;
 }
 
-.gen-display {
+.stats-display {
+  white-space: pre;
+  font-family: monospace;
   color: #ffffff;
   background-color: rgba(0, 0, 0, 0.6);
   padding: 6px 10px;
   border-radius: 4px;
   font-size: 14px;
+  line-height: 1.4;
 }
 
 .advance-control {
@@ -75,6 +78,13 @@ canvas {
   font-size: 14px;
   border: 1px solid #555;
   border-radius: 4px;
+  -moz-appearance: textfield;
+}
+
+.advance-control input::-webkit-outer-spin-button,
+.advance-control input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .advance-control button {
@@ -87,24 +97,6 @@ canvas {
   background-color: #ffffff;
   color: #000;
   border-radius: 4px;
-}
-
-.fps-stats {
-  white-space: pre;
-  display: flex;
-  font-family: monospace;
-  color: #ffffff;
-  position: fixed;
-  bottom: 0;
-  right: 0;
-  width: 300px;
-  height: 100px;
-  margin-bottom: 10px;
-  margin-right: 10px;
-  /* background-color: #ddd; */
-  /* text-align: center; */
-  align-items: center;
-  justify-items: center;
 }
 
 #mode-indicator {
