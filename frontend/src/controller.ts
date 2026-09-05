@@ -52,6 +52,10 @@ export class Controller {
             statsBtn.blur();
         });
 
+        d('pattern-toggle').addEventListener('click', () => {
+            this.view.togglePatternPane();
+        });
+
         const fpsToggle = d('fps-toggle') as HTMLButtonElement;
         fpsToggle.addEventListener('click', () => {
             this.model.toggleGPS();
@@ -94,7 +98,14 @@ export class Controller {
 
         if (this.model.mode === MODE_EDIT) {
             const [x, y] = this.view.screenToWorld(e.clientX, e.clientY);
-            this.model.toggleCell(x, y);
+            if (this.model.activePattern !== null) {
+                // Place the selected pattern with its top-left at the cursor,
+                // then clear it so the click is one-shot.
+                this.model.placePattern(x, y, this.model.activePattern.cells);
+                this.model.setActivePattern(null);
+            } else {
+                this.model.toggleCell(x, y);
+            }
             this.view.render();
         }
     }

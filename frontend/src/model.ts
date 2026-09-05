@@ -1,4 +1,5 @@
 import { Universe } from "wasm-crate";
+import { Pattern } from "./patterns";
 
 export const MODE_PAN = "PAN";
 export const MODE_EDIT = "EDIT";
@@ -16,6 +17,10 @@ export class Model {
     universe: Universe;
 
     mode: string = MODE_PAN;
+
+    // Pattern selected in the sidebar for placement (null = none). When set,
+    // the next edit-mode click places it with its top-left at the cursor.
+    activePattern: Pattern | null = null;
 
     // Camera in world (cell) coordinates. scale = screen pixels per world cell.
     center_x = 0;
@@ -65,6 +70,14 @@ export class Model {
         this.mode = mode;
     }
 
+    setActivePattern(pattern: Pattern | null) {
+        this.activePattern = pattern;
+        // Selecting a pattern is an intent to place it; enter edit mode.
+        if (pattern !== null) {
+            this.mode = MODE_EDIT;
+        }
+    }
+
     toggleMode() {
         this.mode = this.mode === MODE_EDIT ? MODE_PAN : MODE_EDIT;
     }
@@ -91,6 +104,12 @@ export class Model {
 
     toggleCell(x: number, y: number) {
         this.universe.toggle(x, y);
+    }
+
+    placePattern(x: number, y: number, cells: [number, number][]) {
+        for (const [dx, dy] of cells) {
+            this.universe.toggle(x + dx, y + dy);
+        }
     }
 
     panByPixels(dx: number, dy: number) {

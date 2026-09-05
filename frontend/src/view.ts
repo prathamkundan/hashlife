@@ -1,6 +1,7 @@
 import { alloc_buffer, free_buffer } from "wasm-crate";
 import { memory } from "wasm-crate/life_new_bg.wasm";
 import { MODE_EDIT, MODE_PAN, Model } from "./model";
+import { PRESET_PATTERNS } from "./patterns";
 
 /// Renders the model to the canvas and keeps the UI controls in sync with it.
 /// The view never mutates the model; it only reads it.
@@ -29,6 +30,11 @@ export class View {
     private statsDisplay: HTMLElement;
     private _lastTickStart = 0;
 
+    // Pattern sidebar elements.
+    private patternToggle: HTMLButtonElement;
+    private patternPane: HTMLElement;
+    private patternList: HTMLElement;
+
     constructor(model: Model, id: string, width: number, height: number) {
         this.model = model;
         this.canvas = document.getElementById(id)! as HTMLCanvasElement;
@@ -48,12 +54,18 @@ export class View {
         this.statsToggleBtn = document.getElementById('stats-toggle')! as HTMLButtonElement;
         this.statsDisplay = document.getElementById('sim-stats')! as HTMLElement;
 
+        this.patternToggle = document.getElementById('pattern-toggle')! as HTMLButtonElement;
+        this.patternPane = document.getElementById('pattern-pane')! as HTMLElement;
+        this.patternList = document.getElementById('pattern-list')! as HTMLElement;
+
         this.bufW = Math.ceil(width / 2);
         this.bufH = Math.ceil(height / 2);
         this.offscreen.width = this.bufW;
         this.offscreen.height = this.bufH;
         this.bufLen = this.bufW * this.bufH * 4;
         this.bufPtr = alloc_buffer(this.bufLen);
+
+        this.buildPatternList();
 
         this.sync();
     }
@@ -88,6 +100,46 @@ avg of last 100 = ${Math.round(stats.mean)}
 min of last 100 = ${Math.round(stats.min)}
 max of last 100 = ${Math.round(stats.max)}
 `.trim();
+    }
+
+    /// Build the sidebar pattern list. Clicking a pattern arms it for placement.
+    buildPatternList() {
+        this.patternList.textContent = "";
+        for (const pattern of PRESET_PATTERNS) {
+            const btn = document.createElement('button');
+            btn.className = 'pattern-item';
+            btn.textContent = `${pattern.name} (${pattern.width}x${pattern.height})`;
+            btn.addEventListener('click', () => {
+                this.model.setActivePattern(pattern);
+                this.sync();
+                this.render();
+            });
+            this.patternList.appendChild(btn);
+        }
+    }
+
+    /// Toggle the sidebar pane open/closed.
+    togglePatternPane() {
+        const open = this.patternPane.classList.contains('open');
+        if (open) {
+            this.patternPane.classList.remove('open');
+            this.patternToggle.textContent = "❯";
+        } else {
+            this.patternPane.classList.add('open');
+            this.patternToggle.textContent = "❮";
+        }
+    }
+
+    /// Sync the sidebar's active-pattern highlight.
+    syncPatterns() {
+        const active = this.model.activePattern;
+        Array.prototype.forEach.call(this.patternList.querySelectorAll('.pattern-item'), (btn: Element) => {
+            const isActive = active !== null && btn.textContent!.startsWith(active.name);
+            btn.classList.toggle('active', isActive);
+        });
+        this.editBtn.textContent = this.model.activePattern !== null
+            ? `Place ${this.model.activePattern.name}`
+            : "Edit";
     }
 
     togglePlay() {
@@ -164,6 +216,7 @@ max of last 100 = ${Math.round(stats.max)}
         this.fpsLabel.style.display = this.model.gps_enabled ? "" : "none";
         this.fpsLabel.textContent = `${this.model.gps_target} gps`;
         this.fpsSlider.value = String(this.model.gps_target);
+        this.syncPatterns();
     }
 
     /// How many generations to advance per simulation tick.
