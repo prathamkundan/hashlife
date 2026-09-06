@@ -93,13 +93,21 @@ export class View {
     /// stats overlay from the model's stats state.
     renderStats() {
         const stats = this.model.recordFrame();
+        const pop = this.model.universe.population();
+        const nodes = this.model.universe.node_lookup_size();
+        const results = this.model.universe.result_lookup_size();
+        const nodeHits = this.model.universe.node_hits();
+        const resultHits = this.model.universe.result_hits();
+        const pruneCount = this.model.universe.prune_count();
+        const lastPruneNodes = this.model.universe.last_prune_nodes();
+        const lastPruneResults = this.model.universe.last_prune_results();
         this.statsDisplay.textContent = `Sim Stats
 Gen: ${this.model.universe.generation()}
-latest = ${Math.round(stats.latest)}
-avg of last 100 = ${Math.round(stats.mean)}
-min of last 100 = ${Math.round(stats.min)}
-max of last 100 = ${Math.round(stats.max)}
-`.trim();
+Population: ${pop}
+Nodes: ${nodes} (${nodeHits} hits)
+Result: ${results} (${resultHits} hits)
+Prune #${pruneCount}: nodes ${lastPruneNodes} -> ${nodes}, results ${lastPruneResults} -> ${results}
+FPS c/a/m/M: ${String(Math.round(stats.latest)).padStart(3, '0')} / ${String(Math.round(stats.mean)).padStart(3, '0')} / ${String(Math.round(stats.min)).padStart(3, '0')} / ${String(Math.round(stats.max)).padStart(3, '0')}`.trim();
     }
 
     /// Build the sidebar pattern list. Clicking a pattern arms it for placement.
@@ -195,11 +203,16 @@ max of last 100 = ${Math.round(stats.max)}
             new Uint8ClampedArray(memory.buffer, this.bufPtr, this.bufLen),
             this.bufW,
             this.bufH,
+            { colorSpace: "srgb" },
         );
         this.offscreenCtx.putImageData(img, 0, 0);
-        // Nearest-neighbor 2x upscale for crisp cells.
+        // Nearest-neighbor 2x upscale for crisp cells. Invert the buffer: wasm
+        // draws live cells black on a white background, so invert to show live
+        // cells white on black.
         this.ctx.imageSmoothingEnabled = false;
+        this.ctx.filter = "invert(1)";
         this.ctx.drawImage(this.offscreen, 0, 0, this.bufW, this.bufH, 0, 0, vpw, vph);
+        this.ctx.filter = "none";
     }
 
     /// Push the model's state out to the DOM controls. Controllers call this

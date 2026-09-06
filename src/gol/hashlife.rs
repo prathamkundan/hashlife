@@ -1,14 +1,23 @@
-use std::{collections::HashMap, rc::Rc, usize};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use crate::gol::{Automata, Coordinate, Grid, State, Universe, C};
 
 const DX: [i32; 8] = [-1, 0, 1, -1, 1, -1, 0, 1];
 const DY: [i32; 8] = [-1, -1, -1, 0, 0, 1, 1, 1];
 
+/// Prune the node/result caches when the interned node count reaches this many.
+/// Tunable: lower bounds memory but re-warms caches more often (lower hit rate);
+/// higher keeps memory but can jank on the mark-and-sweep stall.
+const PRUNE_THRESHOLD: usize = 5_000_000;
+
 pub struct HashLifeUniverse {
     root: Rc<Node>,
     generation: u64,
     node_manager: HashlifeNodeManager,
+    automata: Box<dyn Automata<Rc<Node>>>,
 }
 
 impl Universe for HashLifeUniverse {
@@ -35,6 +44,12 @@ impl Universe for HashLifeUniverse {
         let root = self.node_manager.expand(self.root.clone());
         self.root = self.result(root, by);
         self.generation += 1u64 << by;
+        // Prune once the interned node count grows large, bounding memory.
+        // Runs between steps (root is the sole anchor) to avoid racing the
+        // transient nodes created mid-recursion.
+        if self.node_manager.node_lookup_size() >= PRUNE_THRESHOLD {
+            self.node_manager.prune(self.root.clone());
+        }
     }
 
     fn bounding_box(&self) -> (super::Coordinate, super::Coordinate) {
@@ -64,7 +79,43 @@ impl HashLifeUniverse {
             root,
             generation: 0,
             node_manager,
+            automata: Box::new(automata),
         }
+    }
+
+    /// Number of entries in the result (advancement) cache.
+    pub fn result_lookup_size(&self) -> usize {
+        self.node_manager.result_lookup_size()
+    }
+
+    /// Number of hash-consed nodes in the node cache.
+    pub fn node_lookup_size(&self) -> usize {
+        self.node_manager.node_lookup_size()
+    }
+
+    /// Number of cache hits on the result (advancement) cache.
+    pub fn result_hits(&self) -> usize {
+        self.node_manager.result_hits()
+    }
+
+    /// Number of cache hits on the hash-consed node cache.
+    pub fn node_hits(&self) -> usize {
+        self.node_manager.node_hits()
+    }
+
+    /// Node count captured right before the most recent prune.
+    pub fn last_prune_nodes(&self) -> usize {
+        self.node_manager.last_prune_nodes()
+    }
+
+    /// Result-cache count captured right before the most recent prune.
+    pub fn last_prune_results(&self) -> usize {
+        self.node_manager.last_prune_results()
+    }
+
+    /// Total number of prunes performed.
+    pub fn prune_count(&self) -> usize {
+        self.node_manager.prune_count()
     }
 
     pub fn result(&mut self, node: Rc<Node>, pow: u8) -> Rc<Node> {
@@ -73,8 +124,9 @@ impl HashLifeUniverse {
             return self.node_manager.empty(node.level() - 1);
         }
 
-        let key = CellKey::for_cell(node.clone());
+        let key = CellKey::for_cell(&node);
         if let Some(node) = self.node_manager.result_lookup.get(&(key.clone(), pow)) {
+            self.node_manager.result_hits += 1;
             return node.clone();
         }
 
@@ -171,21 +223,22 @@ impl HashLifeUniverse {
         }
 
         // Hash-consed cache: looked up by the node's 4 quadrant pointers.
-        let key = CellKey::for_cell(node.clone());
+        let key = CellKey::for_cell(&node);
 
         if let Some(cached) = self
             .node_manager
             .result_lookup
             .get(&(key.clone(), level - 2))
         {
+            self.node_manager.result_hits += 1;
             return cached.clone();
         }
 
         let result = if level == 2 {
-            let nw = self.node_manager.rule(node.clone(), &C(-1, -1));
-            let ne = self.node_manager.rule(node.clone(), &C(0, -1));
-            let sw = self.node_manager.rule(node.clone(), &C(-1, 0));
-            let se = self.node_manager.rule(node, &C(0, 0));
+            let nw = self.rule(node.clone(), &C(-1, -1));
+            let ne = self.rule(node.clone(), &C(0, -1));
+            let sw = self.rule(node.clone(), &C(-1, 0));
+            let se = self.rule(node, &C(0, 0));
             self.node_manager.get_or_create(nw, ne, sw, se)
         } else {
             // The 13 unholy recursions: 9 overlapping sub-nodes one level down,
@@ -250,10 +303,18 @@ impl HashLifeUniverse {
             .insert((key, level - 2), result.clone());
         result
     }
+
+    pub fn rule(&self, node: Rc<Node>, loc: &Coordinate) -> Rc<Node> {
+        if self.automata.step(node, loc) == State::ALIVE {
+            self.node_manager.live_leaf.clone()
+        } else {
+            self.node_manager.dead_leaf.clone()
+        }
+    }
 }
 
-const RGBA_DEAD: [u8; 4] = [0, 0, 0, 255];
-const RGBA_LIVE: [u8; 4] = [255, 255, 255, 255];
+const RGBA_LIVE: [u8; 4] = [0, 0, 0, 255];
+const RGBA_DEAD: [u8; 4] = [255, 255, 255, 255];
 
 /// A pixel-aligned rectangle in the output buffer.
 struct PixelSpan {
@@ -360,6 +421,9 @@ struct Raster<'a> {
 impl<'a> Raster<'a> {
     /// Fill a clipped pixel rectangle with a solid RGBA color.
     fn fill_rect(&mut self, span_x: &PixelSpan, span_y: &PixelSpan, alive: bool) {
+        if !alive {
+            return;
+        }
         let color = if alive { RGBA_LIVE } else { RGBA_DEAD };
         for py in span_y.lo..span_y.hi {
             let row = (py * self.viewport.px_w + span_x.lo) as usize * 4;
@@ -372,8 +436,7 @@ impl<'a> Raster<'a> {
 
     /// Recursively draw `node`, which covers the world square of size `side`
     /// rooted at `pos`, into the buffer pixels it spans.
-    fn draw_node(&mut self, node: &Rc<Node>, pos: Coordinate) {
-        let side: i64 = 1 << node.level();
+    fn draw_node(&mut self, node: &Rc<Node>, pos: Coordinate, side: i64) {
         let x = i64::from(pos.x);
         let y = i64::from(pos.y);
         let sx = self.viewport.span_x(x, x + side).clip(self.viewport.px_w);
@@ -397,10 +460,31 @@ impl<'a> Raster<'a> {
                     return;
                 }
                 let half = side >> 1;
-                self.draw_node(nw, pos);
-                self.draw_node(ne, Coordinate { x: pos.x + half as i32, y: pos.y });
-                self.draw_node(sw, Coordinate { x: pos.x, y: pos.y + half as i32 });
-                self.draw_node(se, Coordinate { x: pos.x + half as i32, y: pos.y + half as i32 });
+                self.draw_node(nw, pos, half);
+                self.draw_node(
+                    ne,
+                    Coordinate {
+                        x: pos.x + half as i32,
+                        y: pos.y,
+                    },
+                    half,
+                );
+                self.draw_node(
+                    sw,
+                    Coordinate {
+                        x: pos.x,
+                        y: pos.y + half as i32,
+                    },
+                    half,
+                );
+                self.draw_node(
+                    se,
+                    Coordinate {
+                        x: pos.x + half as i32,
+                        y: pos.y + half as i32,
+                    },
+                    half,
+                );
             }
         }
     }
@@ -417,7 +501,7 @@ impl HashLifeUniverse {
     /// zoomed out). Work scales with the number of nodes intersecting the
     /// viewport, not with the population or the raw pixel count.
     pub fn rasterize(&self, nw: Coordinate, se: Coordinate, vpw: u32, vph: u32, buf: &mut [u8]) {
-        buf.fill(0);
+        buf.fill(255);
         let Some(viewport) = Viewport::new(nw, se, vpw, vph) else {
             return;
         };
@@ -427,7 +511,7 @@ impl HashLifeUniverse {
             y: -(side as i32 / 2),
         };
         let mut rast = Raster { viewport, buf };
-        rast.draw_node(&self.root, root_pos);
+        rast.draw_node(&self.root, root_pos, side);
     }
 }
 
@@ -575,8 +659,8 @@ impl CellKey {
         }
     }
 
-    pub fn for_cell(node: Rc<Node>) -> CellKey {
-        match &*node {
+    pub fn for_cell(node: &Rc<Node>) -> CellKey {
+        match &**node {
             Node::Cell {
                 level,
                 nw,
@@ -601,10 +685,16 @@ pub struct HashlifeNodeManager {
     max_width: i32,
     radius: i32,
 
-    automata: Box<dyn Automata<Rc<Node>>>,
-
     pub result_lookup: HashMap<(CellKey, u8), Rc<Node>>,
     node_lookup: HashMap<CellKey, Rc<Node>>,
+
+    result_hits: usize,
+    node_hits: usize,
+
+    /// Node/result counts captured right before the most recent prune.
+    last_prune_nodes: usize,
+    last_prune_results: usize,
+    prune_count: usize,
 
     dead_leaf: Rc<Node>,
     live_leaf: Rc<Node>,
@@ -617,12 +707,16 @@ impl Default for HashlifeNodeManager {
             levels: Default::default(),
             max_width: Default::default(),
             radius: Default::default(),
-            result_lookup: Default::default(),
-            node_lookup: Default::default(),
+            result_lookup: HashMap::with_capacity((PRUNE_THRESHOLD * 3) / 4),
+            node_lookup: HashMap::with_capacity(PRUNE_THRESHOLD),
+            result_hits: 0,
+            node_hits: 0,
+            last_prune_nodes: 0,
+            last_prune_results: 0,
+            prune_count: 0,
             dead_leaf: Rc::new(Node::Leaf(0)),
             live_leaf: Rc::new(Node::Leaf(1)),
             empty_nodes: Default::default(),
-            automata: Box::new(ConwayGOLHashlife::new()),
         }
     }
 }
@@ -646,26 +740,48 @@ impl HashlifeNodeManager {
         }
     }
 
-    pub fn new_with_rule(levels: u8, automata: Box<dyn Automata<Rc<Node>>>) -> HashlifeNodeManager {
-        let mut empty_nodes: Vec<Rc<Node>> = Vec::with_capacity(usize::from(levels));
-        for idx in 0..=empty_nodes.capacity() {
-            empty_nodes.push(Rc::new(Node::empty(idx as u8)));
-        }
-
-        HashlifeNodeManager {
-            levels: levels,
-            max_width: 1 << levels,
-            radius: 1 << (levels - 1),
-            empty_nodes: empty_nodes,
-            automata: automata,
-            ..Default::default()
-        }
-    }
-
     pub fn empty(&self, level: u8) -> Rc<Node> {
-        assert!(level as usize <= self.empty_nodes.len(), "node manager cannot handle the level");
+        assert!(
+            level as usize <= self.empty_nodes.len(),
+            "node manager cannot handle the level"
+        );
         let idx = usize::from(level);
         self.empty_nodes[idx].clone()
+    }
+
+    /// Number of entries in the result (advancement) cache.
+    pub fn result_lookup_size(&self) -> usize {
+        self.result_lookup.len()
+    }
+
+    /// Number of hash-consed nodes in the node cache.
+    pub fn node_lookup_size(&self) -> usize {
+        self.node_lookup.len()
+    }
+
+    /// Number of cache hits on the result (advancement) cache.
+    pub fn result_hits(&self) -> usize {
+        self.result_hits
+    }
+
+    /// Number of cache hits on the hash-consed node cache.
+    pub fn node_hits(&self) -> usize {
+        self.node_hits
+    }
+
+    /// Node count captured right before the most recent prune.
+    pub fn last_prune_nodes(&self) -> usize {
+        self.last_prune_nodes
+    }
+
+    /// Result-cache count captured right before the most recent prune.
+    pub fn last_prune_results(&self) -> usize {
+        self.last_prune_results
+    }
+
+    /// Total number of prunes performed.
+    pub fn prune_count(&self) -> usize {
+        self.prune_count
     }
 
     pub fn get_or_create(
@@ -680,6 +796,7 @@ impl HashlifeNodeManager {
         } else {
             let key = CellKey::from_quads(nw.clone(), ne.clone(), sw.clone(), se.clone());
             if let Some(node) = self.node_lookup.get(&key) {
+                self.node_hits += 1;
                 node.clone()
             } else {
                 let node = Rc::new(Node::new(nw, ne, sw, se));
@@ -779,14 +896,6 @@ impl HashlifeNodeManager {
         self.get_or_create(nw, ne, sw, se)
     }
 
-    pub fn rule(&self, node: Rc<Node>, loc: &Coordinate) -> Rc<Node> {
-        if self.automata.step(node, loc) == State::ALIVE {
-            self.live_leaf.clone()
-        } else {
-            self.dead_leaf.clone()
-        }
-    }
-
     /// Extract the 4 quadrant children of a level `n` node.
     pub fn quad_of(&mut self, n: &Rc<Node>) -> (Rc<Node>, Rc<Node>, Rc<Node>, Rc<Node>) {
         match &**n {
@@ -829,6 +938,13 @@ impl HashlifeNodeManager {
 
     /// Pad `node` up one level, wrapping it in a border of empty cells.
     /// The node stays centered at the origin.
+    ///
+    /// The padding nodes MUST be interned via `get_or_create` (not built with
+    /// bare `Node::new`): the result cache's `CellKey` stores raw child
+    /// pointers (`Rc::as_ptr`), not strong refs. An uninterned padding node is
+    /// freed as soon as the expanded root is dropped, its address may then be
+    /// reused by a different node, and the stale `result_lookup` key would
+    /// return a wrong cached result — freezing the simulation.
     fn expand(&mut self, node: Rc<Node>) -> Rc<Node> {
         let level = node.level();
         let e = self.empty(level - 1);
@@ -856,6 +972,68 @@ impl HashlifeNodeManager {
         let new_sw = self.quad(&sw, 1); // ne
         let new_se = self.quad(&se, 0); // nw
         self.get_or_create(new_nw, new_ne, new_sw, new_se)
+    }
+
+    /// Prunes the node and result cache based on reachability from the current root
+    pub fn prune(&mut self, root: Rc<Node>) {
+        self.last_prune_nodes = self.node_lookup.len();
+        self.last_prune_results = self.result_lookup.len();
+        self.prune_count += 1;
+
+        // Mark phase: collect the CellKey of every node reachable from `root`.
+        let mut to_retain = HashSet::new();
+        Self::_prune(&root, &mut to_retain);
+
+        // Sweep the node and result caches in a single pass over the retained
+        // set (the reachable nodes), rather than draining the whole (potentially
+        // multi-million-entry) caches. Keeping the node cache is required for
+        // correctness: hash-consing means each live node must stay interned so
+        // future `get_or_create` calls return the same pointer. Keeping result
+        // entries is pure memoization — dropping them only changes hit rates.
+        //
+        // For each retained key: if it's in `node_lookup`, carry it into the
+        // fresh node map; and if its level >= 2, look up the canonical result
+        // key `(key, level - 2)` used by `_result` and carry that into the fresh
+        // result map. Assigning the fresh maps drops the old ones, freeing the
+        // unreachable nodes' refs.
+        let mut new_node_lookup = HashMap::with_capacity(PRUNE_THRESHOLD);
+        let mut new_result_lookup = HashMap::with_capacity((PRUNE_THRESHOLD * 3) / 4);
+        for key in to_retain.iter() {
+            if let Some(node) = self.node_lookup.get(key) {
+                new_node_lookup.insert(key.clone(), node.clone());
+            }
+            if key.level >= 2 {
+                let rkey = (key.clone(), key.level - 2);
+                if let Some(value) = self.result_lookup.get(&rkey) {
+                    new_result_lookup.insert(rkey, value.clone());
+                }
+            }
+        }
+        self.node_lookup = new_node_lookup;
+        self.result_lookup = new_result_lookup;
+    }
+
+    /// Mark phase: walk the DAG reachable from `node`, inserting each reachable
+    /// `Cell`'s key into `to_retain`. Hash-consed nodes form a DAG (children are
+    /// shared between many parents), so `to_retain` doubles as the visited set:
+    /// we only descend into a node the first time we mark it. Without this, the
+    /// walk would re-descend shared subtrees exponentially and hang.
+    fn _prune(node: &Rc<Node>, toRetain: &mut HashSet<CellKey>) {
+        match node.as_ref() {
+            Node::Cell { nw, ne, sw, se, .. } => {
+                let key = CellKey::for_cell(&node);
+                if toRetain.contains(&key) {
+                    return; // already visited via another parent; don't re-walk
+                }
+                toRetain.insert(key);
+                Self::_prune(nw, toRetain);
+                Self::_prune(ne, toRetain);
+                Self::_prune(sw, toRetain);
+                Self::_prune(se, toRetain);
+            }
+            Node::Leaf(_) => {}
+            Node::Empty(_) => {}
+        }
     }
 }
 
@@ -948,6 +1126,71 @@ mod tests {
     }
 
     // ---- step ----
+
+    #[test]
+    fn test_glider_moves_with_expand() {
+        // Glider cells (classic), placed so it moves down-right. After 4 steps
+        // it returns to its shape shifted by (1,1). Verify it actually moves.
+        let mut uni = HashLifeUniverse::new(5);
+        let on = [(0, -1), (1, 0), (-1, 1), (0, 1), (1, 1)];
+        let g = build8x8(&mut uni.node_manager, &on);
+        uni.root = g;
+
+        for _ in 0..4 {
+            uni.step(1);
+        }
+        assert_eq!(uni.generation(), 4);
+        // Shifted glider (down-right by 1): the original set translated.
+        let moved = [(1, 0), (2, 1), (0, 2), (1, 2), (2, 2)];
+        for (x, y) in moved {
+            assert_eq!(
+                uni.root.at(&C(x, y)),
+                1,
+                "cell ({x},{y}) alive after moving"
+            );
+        }
+    }
+
+    #[test]
+    fn test_prune_preserves_step_correctness() {
+        // A horizontal blinker has period 2. Step it many times, pruning after
+        // each step; the blinker must keep its period-2 behavior and population.
+        let mut uni = HashLifeUniverse::new(4);
+        let on = [(-1, 0), (0, 0), (1, 0)];
+        let g = build8x8(&mut uni.node_manager, &on);
+        uni.root = g;
+
+        for _ in 0..50 {
+            uni.step_by_pow(1);
+            uni.node_manager.prune(uni.root.clone());
+        }
+
+        // Period-2: after an even number of 2-generation steps the blinker is
+        // horizontal again. We stepped 50 * 2 = 100 generations, which is even.
+        assert_eq!(uni.generation(), 100);
+        assert_eq!(uni.root.pop(), 3, "blinker keeps population");
+        assert_eq!(uni.root.at(&C(-1, 0)), 1, "left blinker cell");
+        assert_eq!(uni.root.at(&C(0, 0)), 1, "center blinker cell");
+        assert_eq!(uni.root.at(&C(1, 0)), 1, "right blinker cell");
+        assert_eq!(uni.root.at(&C(0, -1)), 0);
+        assert_eq!(uni.root.at(&C(0, 1)), 0);
+        assert!(uni.node_manager.node_lookup_size() > 0);
+    }
+
+    #[test]
+    fn test_prune_reduces_node_count() {
+        let mut uni = HashLifeUniverse::new(4);
+        let on = [(-1, 0), (0, 0), (1, 0)];
+        let g = build8x8(&mut uni.node_manager, &on);
+        uni.root = g;
+        for _ in 0..20 {
+            uni.step_by_pow(1);
+        }
+        let before = uni.node_manager.node_lookup_size();
+        uni.node_manager.prune(uni.root.clone());
+        let after = uni.node_manager.node_lookup_size();
+        assert!(after <= before, "prune must not grow the node cache");
+    }
 
     #[test]
     fn test_result_empty_level() {
@@ -1088,15 +1331,18 @@ mod tests {
     }
 
     fn assert_dark(buf: &[u8], vpw: u32, px: u32, py: u32) {
-        assert_eq!(pixel(buf, vpw, px, py), (0, 0, 0, 255), "pixel ({px},{py})");
-    }
-
-    fn assert_live(buf: &[u8], vpw: u32, px: u32, py: u32) {
+        // Buffer encoding is inverted (dead = white); the JS side inverts it
+        // back for display, so dark-on-screen means dead in the buffer.
         assert_eq!(
             pixel(buf, vpw, px, py),
             (255, 255, 255, 255),
             "pixel ({px},{py})"
         );
+    }
+
+    fn assert_live(buf: &[u8], vpw: u32, px: u32, py: u32) {
+        // Buffer encoding is inverted (live = black); JS inverts for display.
+        assert_eq!(pixel(buf, vpw, px, py), (0, 0, 0, 255), "pixel ({px},{py})");
     }
 
     /// Build a horizontal blinker at the origin: cells (-1,0),(0,0),(1,0).

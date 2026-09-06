@@ -93,6 +93,41 @@ impl Universe {
     pub fn population(&self) -> usize {
         self.inner.population()
     }
+
+    /// Number of entries in the result (advancement) cache.
+    pub fn result_lookup_size(&self) -> usize {
+        self.inner.result_lookup_size()
+    }
+
+    /// Number of hash-consed nodes in the node cache.
+    pub fn node_lookup_size(&self) -> usize {
+        self.inner.node_lookup_size()
+    }
+
+    /// Number of cache hits on the result (advancement) cache.
+    pub fn result_hits(&self) -> usize {
+        self.inner.result_hits()
+    }
+
+    /// Number of cache hits on the hash-consed node cache.
+    pub fn node_hits(&self) -> usize {
+        self.inner.node_hits()
+    }
+
+    /// Node count captured right before the most recent prune.
+    pub fn last_prune_nodes(&self) -> usize {
+        self.inner.last_prune_nodes()
+    }
+
+    /// Result-cache count captured right before the most recent prune.
+    pub fn last_prune_results(&self) -> usize {
+        self.inner.last_prune_results()
+    }
+
+    /// Total number of prunes performed.
+    pub fn prune_count(&self) -> usize {
+        self.inner.prune_count()
+    }
 }
 
 /// Allocate a zero-initialized RGBA buffer of `len` bytes in wasm memory.

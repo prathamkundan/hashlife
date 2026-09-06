@@ -17,6 +17,7 @@ pub trait Universe {
     fn generation(&self) -> u64;
     fn bounding_box(&self) -> (Coordinate, Coordinate);
     fn root_level(&self) -> u8;
+    fn toggle(&mut self, loc: Coordinate);
 }
 
 #[derive(Clone, Copy)]

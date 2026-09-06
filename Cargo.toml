@@ -16,3 +16,13 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 [dependencies.web-sys]
 version="0.3"
 features=["console"]
+
+[profile.release]
+opt-level = 3               # Maximum LLVM optimizations for speed
+lto = true                  # Enable Link-Time Optimization across all crates
+codegen-units = 1           # Reduce parallel generation blocks to allow more aggressive global optimization
+panic = "abort" 
+
+[package.metadata.wasm-pack.profile.release]
+# Pass aggressive performance flags to the underlying binaryen wasm-opt tool
+wasm-opt = ["-O4", "--enable-simd"] 
